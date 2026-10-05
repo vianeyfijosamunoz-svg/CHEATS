@@ -98,6 +98,7 @@ local function SetDevice(use_old)
         Desktop = "MouseKeyboard",
         Mobile = "Touch",
         Console = "Gamepad",
+        VR = "VR",
         PC = "MouseKeyboard",
         Controller = "Gamepad",
     }
@@ -129,7 +130,7 @@ local function DeviceSpam()
     device_cancel += 1
     local token = device_cancel
     task.spawn(function()
-        local list = {"Desktop", "Mobile", "Console"}
+        local list = {"Desktop", "Mobile", "Console", "VR"}
         local lastDevice = states.spoofer_state.device
         while states.spoofer_state.device_spam and token == device_cancel do
             local newDevice
@@ -161,9 +162,11 @@ local SilentFOVTransparency = 0
 local SilentFOVRadius = 300
 local SilentFOVColor = Color3.fromRGB(255, 255, 255)
 local SilentMaxDistance = 500
+local SilentHitpart = "Head"
+local SilentHitchance = 100
 local activeTargetPos = nil
 local PredictionEnabled = true
-local PredictionAmount = 0.165
+local PredictionAmount = 0.185
 
 local KatanaFlashEnabled = false
 local EscudoEnabled = false
@@ -227,12 +230,7 @@ local FullAutoEnabled = false
 
 getgenv().SpinbotEnabled = false
 getgenv().SpinbotSpeed = 800
-getgenv().AutoQueueEnabled = false
-getgenv().AutoLoadoutEnabled = false
-getgenv().AutoRespawnEnabled = false
-getgenv().AntiAFKEnabled = false
 
-getgenv().UndergroundEnabled = false
 getgenv().HipHeightEnabled = false
 getgenv().HipHeightValue = 2
 getgenv().CharTransparencyEnabled = false
@@ -244,6 +242,7 @@ getgenv().GravityValue = 196.2
 getgenv().InfiniteJumpEnabled = false
 getgenv().SpeedBoostEnabled = false
 getgenv().SpeedBoostValue = 30
+getgenv().NoclipEnabled = false
 
 local defaultGravity = workspace.Gravity
 
@@ -269,7 +268,12 @@ local ESPConfig = {
     MaxDistance = 1500,
     TextSize = 13,
     PingEnabled = true,
-    FPSEnabled = true
+    FPSEnabled = true,
+    ChamsEnabled = false,
+    ChamsFillColor = Color3.fromRGB(0, 255, 128),
+    ChamsOutlineColor = Color3.fromRGB(255, 255, 255),
+    ChamsFillTransparency = 0.5,
+    ChamsOutlineTransparency = 0
 }
 
 local CrosshairEnabled = false
@@ -297,10 +301,6 @@ local CurrentTarget = nil
 local DamageNumbersEnabled = false
 local StreamerModeEnabled = false
 local KeybindDisplayEnabled = false
-local FlightEnabled = false
-local FlightSpeed = 60
-local flightBodyVelocity = nil
-local flightBodyGyro = nil
 
 local KillSoundsEnabled = false
 local SelectedKillSound = "CSGO"
@@ -320,8 +320,76 @@ local KillSoundIds = {
     ["Headshot Classic"] = "rbxassetid://3415635180"
 }
 
+local SkyboxPresets = {
+    ["None"] = nil,
+    ["Space"] = {
+        SkyboxBk = "rbxassetid://159454299",
+        SkyboxDn = "rbxassetid://159454296",
+        SkyboxFt = "rbxassetid://159454293",
+        SkyboxLf = "rbxassetid://159454286",
+        SkyboxRt = "rbxassetid://159454300",
+        SkyboxUp = "rbxassetid://159454288"
+    },
+    ["Night"] = {
+        SkyboxBk = "rbxassetid://12064107",
+        SkyboxDn = "rbxassetid://12064152",
+        SkyboxFt = "rbxassetid://12064121",
+        SkyboxLf = "rbxassetid://12063984",
+        SkyboxRt = "rbxassetid://12064115",
+        SkyboxUp = "rbxassetid://12064131"
+    },
+    ["Sunset"] = {
+        SkyboxBk = "rbxassetid://600830446",
+        SkyboxDn = "rbxassetid://600831635",
+        SkyboxFt = "rbxassetid://600832720",
+        SkyboxLf = "rbxassetid://600833862",
+        SkyboxRt = "rbxassetid://600835177",
+        SkyboxUp = "rbxassetid://600836968"
+    },
+    ["Pink"] = {
+        SkyboxBk = "rbxassetid://271042516",
+        SkyboxDn = "rbxassetid://271077391",
+        SkyboxFt = "rbxassetid://271042556",
+        SkyboxLf = "rbxassetid://271077391",
+        SkyboxRt = "rbxassetid://271042556",
+        SkyboxUp = "rbxassetid://271077391"
+    },
+    ["Clouds"] = {
+        SkyboxBk = "rbxassetid://591058823",
+        SkyboxDn = "rbxassetid://591059876",
+        SkyboxFt = "rbxassetid://591058104",
+        SkyboxLf = "rbxassetid://591057945",
+        SkyboxRt = "rbxassetid://591057792",
+        SkyboxUp = "rbxassetid://591058671"
+    },
+    ["Galaxy"] = {
+        SkyboxBk = "rbxassetid://159454286",
+        SkyboxDn = "rbxassetid://159454296",
+        SkyboxFt = "rbxassetid://159454293",
+        SkyboxLf = "rbxassetid://159454299",
+        SkyboxRt = "rbxassetid://159454300",
+        SkyboxUp = "rbxassetid://159454288"
+    }
+}
+
+local SelectedSkybox = "None"
+
+local AntiAimEnabled = false
+local AntiAimMode = "Spin"
+local AntiAimYaw = 0
+local AntiAimPitch = 0
+local AntiAimJitter = 15
+local AntiAimSpinSpeed = 30
+
+local ResolverEnabled = false
+local resolverCache = {}
+
+local AutoReloadEnabled = false
+local NoRecoilEnabled = false
+
 local LeftESPGroup = Tabs.ESP:AddLeftGroupbox("ESP Visuals (Drawing)")
 local RightESPGroup = Tabs.ESP:AddRightGroupbox("ESP Settings & Filters")
+local ChamsGroup = Tabs.ESP:AddLeftGroupbox("Chams")
 
 LeftESPGroup:AddToggle("ESPBox", {Text = "2D Box ESP", Default = false, Callback = function(v) ESPConfig.BoxEnabled = v end})
 LeftESPGroup:AddToggle("ESPCornerBox", {Text = "Corner Box ESP", Default = false, Callback = function(v) ESPConfig.CornerBoxEnabled = v end})
@@ -335,8 +403,8 @@ LeftESPGroup:AddToggle("ESPTracers", {Text = "Snaplines / Tracers", Default = fa
 LeftESPGroup:AddToggle("ESPOffscreen", {Text = "Offscreen Arrows", Default = false, Callback = function(v) ESPConfig.OffscreenEnabled = v end})
 LeftESPGroup:AddToggle("ESPPing", {Text = "Ping ESP", Default = true, Callback = function(v) ESPConfig.PingEnabled = v end})
 LeftESPGroup:AddToggle("ESPFPS", {Text = "FPS ESP", Default = true, Callback = function(v) ESPConfig.FPSEnabled = v end})
+LeftESPGroup:AddToggle("ESPWeapon", {Text = "Weapon ESP", Default = false, Callback = function(v) ESPConfig.WeaponEnabled = v end})
 
-RightESPGroup:AddToggle("ESPWeapon", {Text = "Weapon ESP", Default = false, Callback = function(v) ESPConfig.WeaponEnabled = v end})
 RightESPGroup:AddToggle("ESPRole", {Text = "Role / Info ESP", Default = false, Callback = function(v) ESPConfig.RoleEnabled = v end})
 RightESPGroup:AddToggle("ESPViewAngle", {Text = "View Angle / Line of Sight", Default = false, Callback = function(v) ESPConfig.ViewAngleEnabled = v end})
 RightESPGroup:AddToggle("ESPFilledBox", {Text = "Filled Box Background", Default = false, Callback = function(v) ESPConfig.FilledBoxEnabled = v end})
@@ -346,6 +414,38 @@ RightESPGroup:AddToggle("ESPTeamCheck", {Text = "Team Check", Default = true, Ca
 RightESPGroup:AddToggle("ESPVisibleOnly", {Text = "Visible Only Check", Default = false, Callback = function(v) ESPConfig.VisibleOnly = v end})
 RightESPGroup:AddSlider("ESPMaxDist", {Text = "Max Distance", Default = 1500, Min = 100, Max = 5000, Rounding = 0, Suffix = " studs", Callback = function(v) ESPConfig.MaxDistance = v end})
 RightESPGroup:AddSlider("ESPTextSize", {Text = "Text Font Size", Default = 13, Min = 10, Max = 20, Rounding = 0, Callback = function(v) ESPConfig.TextSize = v end})
+
+ChamsGroup:AddToggle("ChamsToggle", {
+    Text = "Enable Chams",
+    Default = false,
+    Callback = function(v) ESPConfig.ChamsEnabled = v end
+})
+ChamsGroup:AddLabel("Fill Color"):AddColorPicker("ChamsFillColorPicker", {
+    Default = Color3.fromRGB(0, 255, 128),
+    Title = "Chams Fill",
+    Callback = function(v) ESPConfig.ChamsFillColor = v end
+})
+ChamsGroup:AddLabel("Outline Color"):AddColorPicker("ChamsOutlineColorPicker", {
+    Default = Color3.fromRGB(255, 255, 255),
+    Title = "Chams Outline",
+    Callback = function(v) ESPConfig.ChamsOutlineColor = v end
+})
+ChamsGroup:AddSlider("ChamsFillTrans", {
+    Text = "Fill Transparency",
+    Default = 0.5,
+    Min = 0,
+    Max = 1,
+    Rounding = 2,
+    Callback = function(v) ESPConfig.ChamsFillTransparency = v end
+})
+ChamsGroup:AddSlider("ChamsOutlineTrans", {
+    Text = "Outline Transparency",
+    Default = 0,
+    Min = 0,
+    Max = 1,
+    Rounding = 2,
+    Callback = function(v) ESPConfig.ChamsOutlineTransparency = v end
+})
 
 local LeftVisualsGroup = Tabs.Visuals:AddLeftGroupbox("World & Environment")
 local RightVisualsGroup = Tabs.Visuals:AddRightGroupbox("Lighting & Post-Processing")
@@ -372,7 +472,6 @@ getgenv().RemoveFogActive = false
 getgenv().CustomFogActive = false
 getgenv().FogDistanceVal = 1000
 getgenv().NoShadowsActive = false
-getgenv().CustomSkyActive = false
 getgenv().RemoveParticlesActive = false
 getgenv().RemoveDecalsActive = false
 getgenv().PlasticMaterialsActive = false
@@ -422,28 +521,31 @@ LeftVisualsGroup:AddToggle("RemoveFogToggle", {Text = "Remove Fog / Infinite Dis
 LeftVisualsGroup:AddToggle("CustomFogToggle", {Text = "Custom Fog Distance", Default = false, Callback = function(v) getgenv().CustomFogActive = v end})
 LeftVisualsGroup:AddSlider("FogDistanceSlider", {Text = "Fog End Range", Default = 1000, Min = 50, Max = 10000, Rounding = 0, Suffix = " studs", Callback = function(v) getgenv().FogDistanceVal = v end})
 LeftVisualsGroup:AddToggle("NoShadowsToggle", {Text = "Disable Global Shadows", Default = false, Callback = function(v) getgenv().NoShadowsActive = v end})
-LeftVisualsGroup:AddToggle("CustomSkyboxToggle", {
-    Text = "Custom Space Skybox", Default = false,
+
+LeftVisualsGroup:AddDropdown("SkyboxDropdown", {
+    Values = {"None", "Space", "Night", "Sunset", "Pink", "Clouds", "Galaxy"},
+    Default = 1,
+    Multi = false,
+    Text = "Skybox",
     Callback = function(v)
-        getgenv().CustomSkyActive = v
+        SelectedSkybox = v
         local existingSky = Lighting:FindFirstChild("ApocalypseCustomSky")
-        if v then
-            if not existingSky then
-                local sky = Instance.new("Sky")
-                sky.Name = "ApocalypseCustomSky"
-                sky.SkyboxBk = "rbxassetid://159454299"
-                sky.SkyboxDn = "rbxassetid://159454296"
-                sky.SkyboxFt = "rbxassetid://159454293"
-                sky.SkyboxLf = "rbxassetid://159454286"
-                sky.SkyboxRt = "rbxassetid://159454300"
-                sky.SkyboxUp = "rbxassetid://159454288"
-                sky.Parent = Lighting
-            end
-        else
-            if existingSky then existingSky:Destroy() end
+        if existingSky then existingSky:Destroy() end
+        local preset = SkyboxPresets[v]
+        if preset then
+            local sky = Instance.new("Sky")
+            sky.Name = "ApocalypseCustomSky"
+            sky.SkyboxBk = preset.SkyboxBk
+            sky.SkyboxDn = preset.SkyboxDn
+            sky.SkyboxFt = preset.SkyboxFt
+            sky.SkyboxLf = preset.SkyboxLf
+            sky.SkyboxRt = preset.SkyboxRt
+            sky.SkyboxUp = preset.SkyboxUp
+            sky.Parent = Lighting
         end
     end
 })
+
 LeftVisualsGroup:AddToggle("RemoveParticlesToggle", {
     Text = "Remove All ParticleEmitters", Default = false,
     Callback = function(v)
@@ -714,8 +816,7 @@ KillSoundsGroup:AddSlider("KillSoundVolumeSlider", {
 local LeftMiscGroup = Tabs.MISC:AddLeftGroupbox("Device Spoofer")
 local RightMiscGroup = Tabs.MISC:AddRightGroupbox("Server & Extra Tools")
 local SpinbotGroup = Tabs.MISC:AddLeftGroupbox("Spinbot & Movement")
-local AutoGroup = Tabs.MISC:AddRightGroupbox("Auto Features")
-local FlightGroup = Tabs.MISC:AddLeftGroupbox("Flight")
+local AntiAimGroup = Tabs.MISC:AddRightGroupbox("Anti-Aim & Resolver")
 
 LeftMiscGroup:AddToggle("SpoofDeviceToggle", {
     Text = "Enable Device Spoofing", Default = false,
@@ -725,7 +826,7 @@ LeftMiscGroup:AddToggle("SpoofDeviceToggle", {
     end
 })
 LeftMiscGroup:AddDropdown("DeviceSelectDropdown", {
-    Values = {"Desktop", "Mobile", "Console"}, Default = 1, Multi = false, Text = "Target Device",
+    Values = {"Desktop", "Mobile", "Console", "VR"}, Default = 1, Multi = false, Text = "Target Device",
     Callback = function(v)
         states.spoofer_state.old_device = states.spoofer_state.device
         states.spoofer_state.device = v
@@ -767,52 +868,59 @@ SpinbotGroup:AddSlider("SpinbotSpeedSlider", {
     Callback = function(v) getgenv().SpinbotSpeed = v end
 })
 
-AutoGroup:AddToggle("AutoQueueToggle", {
-    Text = "Auto Queue", Default = false,
-    Callback = function(v)
-        getgenv().AutoQueueEnabled = v
-        if v then Library:Notify("Auto Queue activado", 3) end
-    end
-})
-AutoGroup:AddToggle("AutoLoadoutToggle", {
-    Text = "Auto Loadout", Default = false,
-    Callback = function(v)
-        getgenv().AutoLoadoutEnabled = v
-        if v then Library:Notify("Auto Loadout activado", 3) end
-    end
-})
-AutoGroup:AddToggle("AutoRespawnToggle", {
-    Text = "Auto Respawn", Default = false,
-    Callback = function(v) getgenv().AutoRespawnEnabled = v end
-})
-AutoGroup:AddToggle("AntiAFKToggle", {
-    Text = "Anti-AFK", Default = false,
-    Callback = function(v) getgenv().AntiAFKEnabled = v end
-})
-
-FlightGroup:AddToggle("FlightToggle", {
-    Text = "Flight Enabled",
+AntiAimGroup:AddToggle("AntiAimToggle", {
+    Text = "Anti-Aim Enabled",
     Default = false,
-    Callback = function(v)
-        FlightEnabled = v
-        if not v then
-            if flightBodyVelocity then flightBodyVelocity:Destroy() flightBodyVelocity = nil end
-            if flightBodyGyro then flightBodyGyro:Destroy() flightBodyGyro = nil end
-        end
-    end
-}):AddKeyPicker("FlightKey", {Default = "F", Text = "Flight Key", Mode = "Toggle", SyncToggleState = true})
-FlightGroup:AddSlider("FlightSpeedSlider", {
-    Text = "Flight Speed", Default = 60, Min = 20, Max = 150, Rounding = 0,
-    Callback = function(v) FlightSpeed = v end
+    Callback = function(v) AntiAimEnabled = v end
+})
+AntiAimGroup:AddDropdown("AntiAimModeDropdown", {
+    Values = {"Spin", "Jitter", "Static", "Down"},
+    Default = 1,
+    Multi = false,
+    Text = "Anti-Aim Mode",
+    Callback = function(v) AntiAimMode = v end
+})
+AntiAimGroup:AddSlider("AntiAimYawSlider", {
+    Text = "Yaw Offset",
+    Default = 0,
+    Min = -180,
+    Max = 180,
+    Rounding = 0,
+    Callback = function(v) AntiAimYaw = v end
+})
+AntiAimGroup:AddSlider("AntiAimPitchSlider", {
+    Text = "Pitch Offset",
+    Default = 0,
+    Min = -89,
+    Max = 89,
+    Rounding = 0,
+    Callback = function(v) AntiAimPitch = v end
+})
+AntiAimGroup:AddSlider("AntiAimJitterSlider", {
+    Text = "Jitter Amount",
+    Default = 15,
+    Min = 0,
+    Max = 90,
+    Rounding = 0,
+    Callback = function(v) AntiAimJitter = v end
+})
+AntiAimGroup:AddSlider("AntiAimSpinSpeedSlider", {
+    Text = "Spin Speed",
+    Default = 30,
+    Min = 5,
+    Max = 100,
+    Rounding = 0,
+    Callback = function(v) AntiAimSpinSpeed = v end
+})
+AntiAimGroup:AddToggle("ResolverToggle", {
+    Text = "Resolver Enabled",
+    Default = false,
+    Callback = function(v) ResolverEnabled = v end
 })
 
 local LeftCharGroup = Tabs.CARACTER:AddLeftGroupbox("Character Mods")
 local RightCharGroup = Tabs.CARACTER:AddRightGroupbox("Movement")
 
-LeftCharGroup:AddToggle("UndergroundToggle", {
-    Text = "Underground (5 studs)", Default = false,
-    Callback = function(v) getgenv().UndergroundEnabled = v end
-})
 LeftCharGroup:AddToggle("HipHeightToggle", {
     Text = "Custom Hip Height", Default = false,
     Callback = function(v) getgenv().HipHeightEnabled = v end
@@ -832,6 +940,11 @@ LeftCharGroup:AddSlider("CharTransparencySlider", {
 LeftCharGroup:AddToggle("NoCollisionToggle", {
     Text = "No Collision", Default = false,
     Callback = function(v) getgenv().NoCollisionEnabled = v end
+})
+LeftCharGroup:AddToggle("NoclipToggle", {
+    Text = "Noclip",
+    Default = false,
+    Callback = function(v) getgenv().NoclipEnabled = v end
 })
 LeftCharGroup:AddToggle("RemoveAccessoriesToggle", {
     Text = "Remove Accessories", Default = false,
@@ -867,6 +980,7 @@ RightCharGroup:AddSlider("SpeedBoostSlider", {
 })
 
 local espCache = {}
+local chamsCache = {}
 local damageNumbers = {}
 local lastHealth = {}
 
@@ -887,6 +1001,14 @@ local function removeESP(player)
         end
         espCache[player] = nil
     end
+    if chamsCache[player] then
+        pcall(function()
+            if chamsCache[player].Highlight then
+                chamsCache[player].Highlight:Destroy()
+            end
+        end)
+        chamsCache[player] = nil
+    end
 end
 
 local function initESP(player)
@@ -900,6 +1022,7 @@ local function initESP(player)
         HealthText = createDrawing("Text", {Visible = false, Center = true, Outline = true, Size = 11, Color = Color3.fromRGB(0, 255, 0)}),
         Distance = createDrawing("Text", {Visible = false, Center = true, Outline = true, Size = 12, Color = Color3.fromRGB(200, 200, 200)}),
         InfoText = createDrawing("Text", {Visible = false, Center = true, Outline = true, Size = 12, Color = Color3.fromRGB(255, 170, 0)}),
+        Weapon = createDrawing("Text", {Visible = false, Center = true, Outline = true, Size = 12, Color = Color3.fromRGB(255, 200, 50)}),
         HeadDot = createDrawing("Circle", {Visible = false, Filled = true, Radius = 4, Color = Color3.fromRGB(255, 255, 255)}),
         Tracer = createDrawing("Line", {Visible = false, Thickness = 1, Color = Color3.fromRGB(255, 255, 255)}),
         ViewAngle = createDrawing("Line", {Visible = false, Thickness = 1.5, Color = Color3.fromRGB(255, 50, 50)}),
@@ -1025,7 +1148,6 @@ local function UpdateKeybindDisplay()
         "Aimbot: E",
         "Silent: Q",
         "Spinbot: V",
-        "Flight: F",
         "Menu: RightShift"
     }
     KeybindDisplay.Text = table.concat(lines, "\n")
@@ -1074,43 +1196,6 @@ local function DisableRageOptimization()
     pcall(function() SoundService.Volume = 1 end)
 end
 
-local targetPos = CFrame.new(500000, 500, 9000)
-local projectiles = {}
-local slingActive = false
-local slingConn, childAddedConn, childRemovedConn
-
-local function toggleSlingBypass(state)
-    slingActive = state
-    if slingActive then
-        childAddedConn = workspace.ChildAdded:Connect(function(o)
-            if not o:IsA("BasePart") then return end
-            if o.Name == "CoreProjectile" then projectiles[o] = true
-            elseif o.Name == "Part" then
-                task.defer(function() if o and o.Parent and o.AssemblyLinearVelocity.Magnitude > 50 then projectiles[o] = true end end)
-            end
-        end)
-        childRemovedConn = workspace.ChildRemoved:Connect(function(o) projectiles[o] = nil end)
-        slingConn = RunService.Heartbeat:Connect(function()
-            pcall(function()
-                for _, p in pairs(Players:GetPlayers()) do
-                    if p ~= LocalPlayer and p.Character then
-                        local h = p.Character:FindFirstChild("HumanoidRootPart")
-                        if h then h.CFrame = targetPos h.AssemblyLinearVelocity = Vector3.zero h.AssemblyAngularVelocity = Vector3.zero end
-                    end
-                end
-                for p in pairs(projectiles) do
-                    if p and p.Parent then p.CFrame = targetPos p.AssemblyLinearVelocity = Vector3.zero else projectiles[p] = nil end
-                end
-            end)
-        end)
-    else
-        if slingConn then slingConn:Disconnect() slingConn = nil end
-        if childAddedConn then childAddedConn:Disconnect() childAddedConn = nil end
-        if childRemovedConn then childRemovedConn:Disconnect() childRemovedConn = nil end
-        table.clear(projectiles)
-    end
-end
-
 local function RunInstantAutoShot()
     pcall(function()
         local char = LocalPlayer.Character
@@ -1134,6 +1219,28 @@ local function GetPredictedPosition(part)
     if not PredictionEnabled or not part then return part.Position end
     local velocity = part.AssemblyLinearVelocity
     return part.Position + (velocity * PredictionAmount)
+end
+
+local function GetResolvedPosition(player, part)
+    if not ResolverEnabled or not part then return part.Position end
+    local cache = resolverCache[player]
+    if not cache then
+        resolverCache[player] = {lastPos = part.Position, lastLook = part.CFrame.LookVector, tick = tick()}
+        return part.Position
+    end
+    local currentLook = part.CFrame.LookVector
+    local diff = (currentLook - cache.lastLook).Magnitude
+    if diff > 0.8 then
+        local resolved = part.Position - (currentLook * 2)
+        cache.lastPos = resolved
+        cache.lastLook = currentLook
+        cache.tick = tick()
+        return resolved
+    end
+    cache.lastPos = part.Position
+    cache.lastLook = currentLook
+    cache.tick = tick()
+    return part.Position
 end
 
 local function GetPlayerStat(player, names)
@@ -1511,6 +1618,9 @@ local function GetClosestPlayerAimbot()
             local head = player.Character:FindFirstChild("Head") or player.Character.HumanoidRootPart
             if AimbotWallCheck then local valid = getValidHead(player.Character) if not valid then continue end end
             local predicted = GetPredictedPosition(head)
+            if ResolverEnabled then
+                predicted = GetResolvedPosition(player, head)
+            end
             local params = RaycastParams.new()
             params.FilterType = Enum.RaycastFilterType.Exclude
             params.FilterDescendantsInstances = {LocalPlayer.Character, Camera}
@@ -1589,8 +1699,6 @@ end
 
 LocalPlayer.CharacterAdded:Connect(function()
     StopFreecam()
-    if flightBodyVelocity then flightBodyVelocity:Destroy() flightBodyVelocity = nil end
-    if flightBodyGyro then flightBodyGyro:Destroy() flightBodyGyro = nil end
 end)
 
 task.spawn(function()
@@ -1605,6 +1713,36 @@ task.spawn(function()
     end
 end)
 
+local function EnableNoRecoil(state)
+    if state then
+        pcall(function()
+            for _, v in pairs(getgc(true)) do
+                if type(v) == "table" then
+                    if rawget(v, "Recoil") then v.Recoil = 0 end
+                    if rawget(v, "RecoilAmount") then v.RecoilAmount = 0 end
+                    if rawget(v, "CameraRecoil") then v.CameraRecoil = 0 end
+                    if rawget(v, "Spread") then v.Spread = 0 end
+                end
+            end
+        end)
+    end
+end
+
+local function DoAutoReload()
+    if not AutoReloadEnabled then return end
+    pcall(function()
+        local char = LocalPlayer.Character
+        if not char then return end
+        local tool = char:FindFirstChildOfClass("Tool")
+        if tool then
+            local ammo = tool:FindFirstChild("Ammo") or tool:FindFirstChild("CurrentAmmo")
+            if ammo and ammo.Value <= 0 then
+                tool:Activate()
+            end
+        end
+    end)
+end
+
 RunService.RenderStepped:Connect(function()
     UpdateFOV()
     UpdateCrosshair()
@@ -1614,42 +1752,48 @@ RunService.RenderStepped:Connect(function()
     SendKillSayMessage()
     CheckKills()
     CheckDamageNumbers()
+    DoAutoReload()
 
     if not getgenv().SilentAimEnabled then 
         activeTargetPos = nil
     else
-        local bestHead = nil
+        local bestPart = nil
         local shortestDist = 9e9
         local screenCenter = Camera.ViewportSize / 2
         for _, plr in pairs(Players:GetPlayers()) do
             local char = plr.Character
             if char and isTargetValid(plr) then
-                local head = char:FindFirstChild("Head")
-                if head then
-                    local predicted = GetPredictedPosition(head)
-                    local distFromMe = (predicted - Camera.CFrame.Position).Magnitude
-                    local headPos, headOnScreen = Camera:WorldToViewportPoint(predicted)
+                local part = char:FindFirstChild(SilentHitpart) or char:FindFirstChild("Head") or char:FindFirstChild("HumanoidRootPart")
+                if part then
+                    local pos = part.Position
+                    if ResolverEnabled then
+                        pos = GetResolvedPosition(plr, part)
+                    end
+                    local distFromMe = (pos - Camera.CFrame.Position).Magnitude
+                    local headPos, headOnScreen = Camera:WorldToViewportPoint(pos)
                     local fovDist = (Vector2.new(headPos.X, headPos.Y) - screenCenter).Magnitude
                     if headOnScreen and distFromMe <= SilentMaxDistance and fovDist <= SilentFOVRadius then
-                        if fovDist < shortestDist then
-                            if SilentWallCheck then
-                                local valid = getValidHead(char)
-                                if valid then 
+                        if math.random(1, 100) <= SilentHitchance then
+                            if fovDist < shortestDist then
+                                if SilentWallCheck then
+                                    local valid = getValidHead(char)
+                                    if valid then 
+                                        shortestDist = fovDist
+                                        bestPart = part 
+                                        CurrentTarget = plr
+                                    end
+                                else
                                     shortestDist = fovDist
-                                    bestHead = valid 
+                                    bestPart = part
                                     CurrentTarget = plr
                                 end
-                            else
-                                shortestDist = fovDist
-                                bestHead = head
-                                CurrentTarget = plr
                             end
                         end
                     end
                 end
             end
         end
-        activeTargetPos = bestHead and GetPredictedPosition(bestHead) or nil
+        activeTargetPos = bestPart and bestPart.Position or nil
     end
 
     if not getgenv().SilentAimEnabled and not AimbotEnabled and not RagebotEnabled then
@@ -1696,6 +1840,32 @@ RunService.RenderStepped:Connect(function()
             local hrp = char and char:FindFirstChild("HumanoidRootPart")
             local hum = char and char:FindFirstChildOfClass("Humanoid")
             local head = char and char:FindFirstChild("Head")
+
+            if ESPConfig.ChamsEnabled and char and hum and hum.Health > 0 then
+                if not chamsCache[player] or not chamsCache[player].Highlight or not chamsCache[player].Highlight.Parent then
+                    local highlight = Instance.new("Highlight")
+                    highlight.Name = "ApocalypseChams"
+                    highlight.FillColor = ESPConfig.ChamsFillColor
+                    highlight.OutlineColor = ESPConfig.ChamsOutlineColor
+                    highlight.FillTransparency = ESPConfig.ChamsFillTransparency
+                    highlight.OutlineTransparency = ESPConfig.ChamsOutlineTransparency
+                    highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+                    highlight.Parent = char
+                    chamsCache[player] = {Highlight = highlight}
+                else
+                    local hl = chamsCache[player].Highlight
+                    hl.FillColor = ESPConfig.ChamsFillColor
+                    hl.OutlineColor = ESPConfig.ChamsOutlineColor
+                    hl.FillTransparency = ESPConfig.ChamsFillTransparency
+                    hl.OutlineTransparency = ESPConfig.ChamsOutlineTransparency
+                end
+            else
+                if chamsCache[player] and chamsCache[player].Highlight then
+                    pcall(function() chamsCache[player].Highlight:Destroy() end)
+                    chamsCache[player] = nil
+                end
+            end
+
             local function hideAll()
                 if visuals then
                     for k, d in pairs(visuals) do
@@ -1804,6 +1974,17 @@ RunService.RenderStepped:Connect(function()
                             visuals.Distance.Text = math.floor(dist) .. " studs"
                             visuals.Distance.Position = Vector2.new(pos.X, boxPos.Y + size.Y + 2)
                         else visuals.Distance.Visible = false end
+                        if ESPConfig.WeaponEnabled then
+                            local tool = char:FindFirstChildOfClass("Tool")
+                            local weaponName = tool and tool.Name or "None"
+                            visuals.Weapon.Visible = true
+                            visuals.Weapon.Text = weaponName
+                            visuals.Weapon.Size = ESPConfig.TextSize - 1
+                            visuals.Weapon.Outline = ESPConfig.TextOutlineEnabled
+                            visuals.Weapon.Position = Vector2.new(pos.X, boxPos.Y + size.Y + 16)
+                        else
+                            visuals.Weapon.Visible = false
+                        end
                         if ESPConfig.HeadDotEnabled and head then
                             local headPos, headOn = Camera:WorldToViewportPoint(head.Position)
                             if headOn then
@@ -1973,7 +2154,7 @@ LeftGroupbox:AddToggle("FillFOVToggle", {Text = "FILL FOV", Default = false, Cal
 LeftGroupbox:AddSlider("FOVTransparency", {Text = "TRANSPARENCY FOV", Default = 0, Min = 0, Max = 100, Rounding = 0, Suffix = "%", Callback = function(Value) FOVTransparency = Value UpdateFOV() end})
 LeftGroupbox:AddSlider("FOVRadius", {Text = "FOV RADIUS", Default = 300, Min = 180, Max = 1000, Rounding = 0, Callback = function(Value) FOVRadius = Value UpdateFOV() end})
 
-local PredictionGroup = Tabs.Main:AddLeftGroupbox("Prediction")
+local PredictionGroup = Tabs.Main:AddLeftGroupbox("Prediction (solo Aimbot)")
 PredictionGroup:AddToggle("PredictionToggle", {
     Text = "Enable Prediction",
     Default = true,
@@ -1981,9 +2162,9 @@ PredictionGroup:AddToggle("PredictionToggle", {
 })
 PredictionGroup:AddSlider("PredictionAmountSlider", {
     Text = "Prediction Amount",
-    Default = 0.165,
+    Default = 0.185,
     Min = 0.05,
-    Max = 0.35,
+    Max = 0.4,
     Rounding = 3,
     Callback = function(v) PredictionAmount = v end
 })
@@ -1999,6 +2180,22 @@ BackstapGroupbox:AddSlider("BackstapSlider", {Text = "Backstap Custom", Default 
 
 RightGroupbox:AddToggle("SilentAimToggle", {Text = "ENABLED (Silent)", Default = false, Callback = function(Value) getgenv().SilentAimEnabled = Value UpdateFOV() end}):AddKeyPicker("SilentAimKey", {Default = "Q", Text = "Silent Aim Keybind", Mode = "Toggle", SyncToggleState = true})
 RightGroupbox:AddToggle("SilentWallCheckToggle", {Text = "WALL CHECK", Default = false, Callback = function(Value) SilentWallCheck = Value end})
+RightGroupbox:AddDropdown("SilentHitpartDropdown", {
+    Values = {"Head", "HumanoidRootPart"},
+    Default = 1,
+    Multi = false,
+    Text = "Hitpart",
+    Callback = function(v) SilentHitpart = v end
+})
+RightGroupbox:AddSlider("SilentHitchanceSlider", {
+    Text = "Hitchance",
+    Default = 100,
+    Min = 0,
+    Max = 100,
+    Rounding = 0,
+    Suffix = "%",
+    Callback = function(v) SilentHitchance = v end
+})
 RightGroupbox:AddToggle("SilentShowFOVToggle", {Text = "SHOW FOV", Default = false, Callback = function(Value) SilentShowFOV = Value UpdateFOV() end}):AddColorPicker("SilentFOVColorPicker", {Default = Color3.fromRGB(255, 255, 255), Title = "Silent FOV Color", Callback = function(Value) SilentFOVColor = Value UpdateFOV() end})
 RightGroupbox:AddToggle("SilentFillFOVToggle", {Text = "FILL FOV", Default = false, Callback = function(Value) SilentFillFOV = Value UpdateFOV() end})
 RightGroupbox:AddSlider("SilentFOVTransparency", {Text = "TRANSPARENCY FOV", Default = 0, Min = 0, Max = 100, Rounding = 0, Suffix = "%", Callback = function(Value) SilentFOVTransparency = Value UpdateFOV() end})
@@ -2015,28 +2212,74 @@ RagebotGroupbox:AddToggle("RagebotToggle", {
         if Toggles.KillSayToggle then Toggles.KillSayToggle:SetValue(Value) end
         if Value then
             ApplyRageOptimization()
-            if RageMode == "GUN" then EnableRapidFire(true) getgenv().SilentAimEnabled = true UpdateFOV()
-            elseif RageMode == "MELE" or RageMode == "KNIFE" then EnableFastMelee(true)
-            elseif RageMode == "SLINGSHOT (BETA)" then toggleSlingBypass(true) end
+            if RageMode == "GUN" then
+                EnableRapidFire(true)
+                EnableFastMelee(true)
+                getgenv().SpinbotEnabled = true
+                getgenv().SpinbotSpeed = 1500
+                if Toggles.SpinbotToggle then Toggles.SpinbotToggle:SetValue(true) end
+                states.spoofer_state.device_spam = true
+                if Toggles.DeviceSpamToggle then Toggles.DeviceSpamToggle:SetValue(true) end
+                DeviceSpam()
+                getgenv().SilentAimEnabled = true
+                UpdateFOV()
+            elseif RageMode == "MELE" then
+                EnableFastMelee(true)
+                getgenv().SpinbotEnabled = true
+                getgenv().SpinbotSpeed = 1500
+                if Toggles.SpinbotToggle then Toggles.SpinbotToggle:SetValue(true) end
+            elseif RageMode == "KNIFE" then
+                getgenv().SpinbotEnabled = true
+                getgenv().SpinbotSpeed = 1500
+                if Toggles.SpinbotToggle then Toggles.SpinbotToggle:SetValue(true) end
+            elseif RageMode == "BAITING SYSTEM" then
+                EnableRapidFire(true)
+                EnableFastMelee(true)
+            end
         else
             DisableRageOptimization()
-            if RageMode == "GUN" then getgenv().SilentAimEnabled = false UpdateFOV()
-            elseif RageMode == "SLINGSHOT (BETA)" then toggleSlingBypass(false) end
+            getgenv().SilentAimEnabled = false
+            UpdateFOV()
         end
     end
 })
-RagebotGroupbox:AddToggle("AntiKnifeToggle", {Text = "ANTI KNIFE", Default = false, Callback = function(Value) AntiKnifeEnabled = Value end})
+RagebotGroupbox:AddToggle("AntiKnifeToggle", {Text = "ANTI KNIFE (solo GUN)", Default = false, Callback = function(Value) AntiKnifeEnabled = Value end})
 RagebotGroupbox:AddDropdown("RageModeDropdown", {
-    Values = {"GUN", "MELE", "KNIFE", "SLINGSHOT (BETA)"}, Default = 1, Multi = false, Text = "Rage Mode",
+    Values = {"GUN", "MELE", "KNIFE", "BAITING SYSTEM"}, Default = 1, Multi = false, Text = "Rage Mode",
     Callback = function(Value)
-        local oldMode = RageMode
         RageMode = Value
-        if oldMode == "SLINGSHOT (BETA)" and RageMode ~= "SLINGSHOT (BETA)" then toggleSlingBypass(false) end
         if RagebotEnabled then
             ApplyRageOptimization()
-            if RageMode == "GUN" then toggleSlingBypass(false) EnableRapidFire(true) getgenv().SilentAimEnabled = true UpdateFOV()
-            elseif RageMode == "MELE" or RageMode == "KNIFE" then toggleSlingBypass(false) getgenv().SilentAimEnabled = false UpdateFOV() EnableFastMelee(true)
-            elseif RageMode == "SLINGSHOT (BETA)" then getgenv().SilentAimEnabled = false UpdateFOV() toggleSlingBypass(true) end
+            if RageMode == "GUN" then
+                EnableRapidFire(true)
+                EnableFastMelee(true)
+                getgenv().SpinbotEnabled = true
+                getgenv().SpinbotSpeed = 1500
+                if Toggles.SpinbotToggle then Toggles.SpinbotToggle:SetValue(true) end
+                states.spoofer_state.device_spam = true
+                if Toggles.DeviceSpamToggle then Toggles.DeviceSpamToggle:SetValue(true) end
+                DeviceSpam()
+                getgenv().SilentAimEnabled = true
+                UpdateFOV()
+            elseif RageMode == "MELE" then
+                EnableFastMelee(true)
+                getgenv().SpinbotEnabled = true
+                getgenv().SpinbotSpeed = 1500
+                if Toggles.SpinbotToggle then Toggles.SpinbotToggle:SetValue(true) end
+                getgenv().SilentAimEnabled = false
+                UpdateFOV()
+            elseif RageMode == "KNIFE" then
+                getgenv().SpinbotEnabled = true
+                getgenv().SpinbotSpeed = 1500
+                if Toggles.SpinbotToggle then Toggles.SpinbotToggle:SetValue(true) end
+                getgenv().SilentAimEnabled = false
+                UpdateFOV()
+            elseif RageMode == "BAITING SYSTEM" then
+                EnableRapidFire(true)
+                EnableFastMelee(true)
+                getgenv().SilentAimEnabled = false
+                UpdateFOV()
+            end
         end
     end
 })
@@ -2051,8 +2294,9 @@ local WeaponsGroupbox = Tabs.Main:AddLeftGroupbox("Weapons")
 WeaponsGroupbox:AddToggle("RapidFireToggle", {Text = "RAPID FIRE", Default = false, Callback = function(Value) EnableRapidFire(Value) end})
 WeaponsGroupbox:AddToggle("FastMeleeToggle", {Text = "FAST MELEE", Default = false, Callback = function(Value) EnableFastMelee(Value) end})
 WeaponsGroupbox:AddToggle("FullAutoToggle", {Text = "FULL AUTO", Default = false, Callback = function(Value) FullAutoEnabled = Value if Value then EnableRapidFire(true) end end})
+WeaponsGroupbox:AddToggle("NoRecoilToggle", {Text = "NO RECOIL", Default = false, Callback = function(Value) NoRecoilEnabled = Value EnableNoRecoil(Value) end})
+WeaponsGroupbox:AddToggle("AutoReloadToggle", {Text = "AUTO RELOAD", Default = false, Callback = function(Value) AutoReloadEnabled = Value end})
 WeaponsGroupbox:AddToggle("NoSpreadToggle", {Text = "NO SPREAD", Default = false, Callback = function(Value) end})
-WeaponsGroupbox:AddToggle("NoRecoilToggle", {Text = "NO RECOIL", Default = false, Callback = function(Value) end})
 
 local OrbitGroupbox = Tabs.Main:AddLeftGroupbox("Orbit")
 OrbitGroupbox:AddToggle("OrbitEnabledToggle", {
@@ -2063,7 +2307,7 @@ OrbitGroupbox:AddToggle("OrbitEnabledToggle", {
     end
 })
 OrbitGroupbox:AddSlider("OrbitStudsSlider", {Text = "Orbit Studs", Default = 2.5, Min = 1, Max = 50, Rounding = 1, Callback = function(Value) OrbitStuds = Value end})
-OrbitGroupbox:AddSlider("OrbitSpeedSlider", {Text = "Orbit Speed", Default = 500000, Min = 1, Max = 1000000, Rounding = 1, Callback = function(Value) OrbitSpeed = Value end})
+OrbitGroupbox:AddSlider("OrbitSpeedSlider", {Text = "Orbit Speed", Default = 500000, Min = 100000, Max = 5000000, Rounding = 0, Callback = function(Value) OrbitSpeed = Value end})
 OrbitGroupbox:AddSlider("OrbitAngleSlider", {Text = "Orbit Angle", Default = 1, Min = 0, Max = 10, Rounding = 1, Callback = function(Value) OrbitAngle = Value end})
 OrbitGroupbox:AddSlider("OrbitHeightSlider", {Text = "Orbit Height", Default = 0, Min = -20, Max = 20, Rounding = 1, Suffix = " studs", Callback = function(Value) OrbitHeight = Value end})
 
@@ -2086,6 +2330,9 @@ RunService.RenderStepped:Connect(function(dt)
             local head = target.Character:FindFirstChild("Head") or target.Character:FindFirstChild("HumanoidRootPart")
             if head then
                 local predicted = GetPredictedPosition(head)
+                if ResolverEnabled then
+                    predicted = GetResolvedPosition(target, head)
+                end
                 Camera.CFrame = CFrame.new(Camera.CFrame.Position, predicted)
             end
         end
@@ -2114,25 +2361,38 @@ RunService.RenderStepped:Connect(function(dt)
         local target = GetClosestTargetPlayer()
         CurrentTarget = target
         local myRoot = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-        if myRoot then
-            if target and isTargetValid(target) and target.Character and target.Character:FindFirstChild("HumanoidRootPart") then
-                local tChar = target.Character
-                local tHrp = tChar.HumanoidRootPart
-                local optimalHitbox = tChar:FindFirstChild("Head") or tHrp
-                local predictedPos = GetPredictedPosition(optimalHitbox)
-                local predictedCFrame = CFrame.new(predictedPos)
-                if RageMode == "GUN" then
-                    local behindCFrame = predictedCFrame * CFrame.new(0, 0, 2)
+        if myRoot and target and isTargetValid(target) and target.Character and target.Character:FindFirstChild("HumanoidRootPart") then
+            local tChar = target.Character
+            local tHrp = tChar.HumanoidRootPart
+            local optimalHitbox = tChar:FindFirstChild("Head") or tHrp
+            local predictedPos = GetPredictedPosition(optimalHitbox)
+            if ResolverEnabled then
+                predictedPos = GetResolvedPosition(target, optimalHitbox)
+            end
+            local predictedCFrame = CFrame.new(predictedPos)
+
+            if RageMode == "GUN" then
+                if AntiKnifeEnabled then
+                    local rightCFrame = predictedCFrame * CFrame.new(2, 0, 0)
+                    ApplyFakePosition(myRoot, rightCFrame)
+                else
+                    local behindCFrame = predictedCFrame * CFrame.new(0, 0, 1.5)
                     ApplyFakePosition(myRoot, behindCFrame)
-                    Camera.CFrame = CFrame.lookAt(Camera.CFrame.Position, predictedPos)
-                elseif RageMode == "MELE" then
-                    local backCFrame = predictedCFrame * CFrame.Angles(0, math.rad(180), 0)
-                    ApplyFakePosition(myRoot, backCFrame)
-                elseif RageMode == "KNIFE" then
-                    local lateral = math.sin(tickCount * 0.7) * 1.8
-                    ApplyFakePosition(myRoot, predictedCFrame * CFrame.new(lateral, 0, 0.65))
                 end
-            else
+                Camera.CFrame = CFrame.lookAt(Camera.CFrame.Position, predictedPos)
+            elseif RageMode == "MELE" then
+                ApplyFakePosition(myRoot, predictedCFrame)
+            elseif RageMode == "KNIFE" then
+                local lateral = math.sin(tickCount * 0.35) * 3.5
+                local knifeCFrame = predictedCFrame * CFrame.new(lateral, 0, 2.5)
+                ApplyFakePosition(myRoot, knifeCFrame)
+            elseif RageMode == "BAITING SYSTEM" then
+                local angle = (tickCount * (50000000 * 0.05))
+                local baitCFrame = predictedCFrame * CFrame.Angles(0, angle, 0) * CFrame.new(0, 5000000, 5000000)
+                ApplyFakePosition(myRoot, baitCFrame)
+            end
+        else
+            if myRoot then
                 local spamOffset = Vector3.new(math.random(-9000000, 9000000), math.random(1000, 9000000), math.random(-9000000, 9000000))
                 ApplyFakePosition(myRoot, CFrame.new(spamOffset))
             end
@@ -2144,43 +2404,18 @@ RunService.RenderStepped:Connect(function(dt)
         hrp.CFrame = hrp.CFrame * CFrame.Angles(0, math.rad(getgenv().SpinbotSpeed), 0)
     end
 
-    if FlightEnabled and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+    if AntiAimEnabled and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
         local hrp = LocalPlayer.Character.HumanoidRootPart
-        local hum = LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
-        if hum then hum.PlatformStand = true end
-        if not flightBodyVelocity or not flightBodyVelocity.Parent then
-            flightBodyVelocity = Instance.new("BodyVelocity")
-            flightBodyVelocity.MaxForce = Vector3.new(9e9, 9e9, 9e9)
-            flightBodyVelocity.Velocity = Vector3.zero
-            flightBodyVelocity.Parent = hrp
+        local yaw = AntiAimYaw
+        local pitch = AntiAimPitch
+        if AntiAimMode == "Spin" then
+            yaw = (tickCount * AntiAimSpinSpeed) % 360
+        elseif AntiAimMode == "Jitter" then
+            yaw = AntiAimYaw + (math.random(-AntiAimJitter, AntiAimJitter))
+        elseif AntiAimMode == "Down" then
+            pitch = 89
         end
-        if not flightBodyGyro or not flightBodyGyro.Parent then
-            flightBodyGyro = Instance.new("BodyGyro")
-            flightBodyGyro.MaxTorque = Vector3.new(9e9, 9e9, 9e9)
-            flightBodyGyro.P = 9e4
-            flightBodyGyro.Parent = hrp
-        end
-        local move = Vector3.zero
-        local camCF = Camera.CFrame
-        if UserInputService:IsKeyDown(Enum.KeyCode.W) then move = move + camCF.LookVector end
-        if UserInputService:IsKeyDown(Enum.KeyCode.S) then move = move - camCF.LookVector end
-        if UserInputService:IsKeyDown(Enum.KeyCode.A) then move = move - camCF.RightVector end
-        if UserInputService:IsKeyDown(Enum.KeyCode.D) then move = move + camCF.RightVector end
-        if UserInputService:IsKeyDown(Enum.KeyCode.Space) then move = move + Vector3.new(0, 1, 0) end
-        if UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) then move = move - Vector3.new(0, 1, 0) end
-        if move.Magnitude > 0 then
-            flightBodyVelocity.Velocity = move.Unit * FlightSpeed
-        else
-            flightBodyVelocity.Velocity = Vector3.zero
-        end
-        flightBodyGyro.CFrame = camCF
-    else
-        if LocalPlayer.Character then
-            local hum = LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
-            if hum then hum.PlatformStand = false end
-        end
-        if flightBodyVelocity then flightBodyVelocity:Destroy() flightBodyVelocity = nil end
-        if flightBodyGyro then flightBodyGyro:Destroy() flightBodyGyro = nil end
+        hrp.CFrame = CFrame.new(hrp.Position) * CFrame.Angles(math.rad(pitch), math.rad(yaw), 0)
     end
 end)
 
@@ -2190,9 +2425,6 @@ RunService.Heartbeat:Connect(function()
     local hum = char:FindFirstChildOfClass("Humanoid")
     local hrp = char:FindFirstChild("HumanoidRootPart")
     if not hum or not hrp then return end
-    if getgenv().UndergroundEnabled then
-        hrp.CFrame = CFrame.new(hrp.Position.X, hrp.Position.Y - 5, hrp.Position.Z)
-    end
     if getgenv().HipHeightEnabled then
         hum.HipHeight = getgenv().HipHeightValue
     end
@@ -2205,7 +2437,7 @@ RunService.Heartbeat:Connect(function()
             end
         end
     end
-    if getgenv().NoCollisionEnabled then
+    if getgenv().NoCollisionEnabled or getgenv().NoclipEnabled then
         for _, part in ipairs(char:GetDescendants()) do
             if part:IsA("BasePart") then
                 part.CanCollide = false
@@ -2229,65 +2461,6 @@ RunService.Heartbeat:Connect(function()
     end
 end)
 
-local lastAutoQueue = 0
-local lastLoadout = 0
-local lastAntiAFK = 0
-
-task.spawn(function()
-    while true do
-        task.wait(0.5)
-        if getgenv().AutoQueueEnabled then
-            local now = tick()
-            if now - lastAutoQueue > 8 then
-                lastAutoQueue = now
-                pcall(function()
-                    game:GetService("TeleportService"):Teleport(game.PlaceId, LocalPlayer)
-                end)
-            end
-        end
-        if getgenv().AutoLoadoutEnabled then
-            local now = tick()
-            if now - lastLoadout > 4 then
-                lastLoadout = now
-                pcall(function()
-                    local remotes = ReplicatedStorage:FindFirstChild("Remotes")
-                    if remotes then
-                        local loadoutRemote = remotes:FindFirstChild("Loadout") or remotes:FindFirstChild("EquipLoadout") or remotes:FindFirstChild("SetLoadout")
-                        if loadoutRemote and loadoutRemote:IsA("RemoteEvent") then
-                            loadoutRemote:FireServer(1)
-                        end
-                    end
-                end)
-            end
-        end
-        if getgenv().AutoRespawnEnabled then
-            local char = LocalPlayer.Character
-            local hum = char and char:FindFirstChildOfClass("Humanoid")
-            if hum and hum.Health <= 0 then
-                pcall(function()
-                    local remotes = ReplicatedStorage:FindFirstChild("Remotes")
-                    if remotes then
-                        local respawn = remotes:FindFirstChild("Respawn") or remotes:FindFirstChild("RequestRespawn")
-                        if respawn then respawn:FireServer() end
-                    end
-                    if LocalPlayer.Character then LocalPlayer.Character:BreakJoints() end
-                end)
-            end
-        end
-        if getgenv().AntiAFKEnabled then
-            local now = tick()
-            if now - lastAntiAFK > 30 then
-                lastAntiAFK = now
-                pcall(function()
-                    local vim = game:GetService("VirtualUser")
-                    vim:CaptureController()
-                    vim:ClickButton2(Vector2.new())
-                end)
-            end
-        end
-    end
-end)
-
 Camera:GetPropertyChangedSignal("ViewportSize"):Connect(UpdateFOV)
 
 local MenuGroup = Tabs["UI Settings"]:AddLeftGroupbox("Menu Settings")
@@ -2295,16 +2468,16 @@ MenuGroup:AddToggle("KeybindMenuOpen", {Default = Library.KeybindFrame.Visible, 
 MenuGroup:AddLabel("Menu bind"):AddKeyPicker("MenuKeybind", {Default = "RightShift", NoUI = true, Text = "Menu keybind"})
 MenuGroup:AddButton("Unload", function()
     DisableRageOptimization()
-    toggleSlingBypass(false)
     StopFreecam()
-    if flightBodyVelocity then flightBodyVelocity:Destroy() end
-    if flightBodyGyro then flightBodyGyro:Destroy() end
     if ScreenGui then ScreenGui:Destroy() end
     for _, line in pairs(Crosshair) do pcall(function() line:Remove() end) end
     for _, d in pairs(radarDots) do pcall(function() d:Remove() end) end
     pcall(function() RadarBG:Remove() RadarBorder:Remove() RadarCenter:Remove() end)
     for _, v in pairs(TargetHUD) do pcall(function() v:Remove() end) end
     pcall(function() KeybindDisplay:Remove() end)
+    for _, p in pairs(chamsCache) do
+        if p.Highlight then pcall(function() p.Highlight:Destroy() end) end
+    end
     Library:Unload()
 end)
 
