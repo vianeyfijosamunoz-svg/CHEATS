@@ -62,18 +62,35 @@ local states = {
         device = "Desktop",
         old_device = "Desktop",
         device_spam = false,
-        spam_rate = 0.5
+        spam_rate = 1.2
     }
 }
+
 local device_cancel = 0
+local cachedSetControls = nil
 local modules = {}
 
-pcall(function()
-    for _, v in ipairs(getgc(true)) do
-        if type(v) == "table" then
-            if rawget(v, "CurrentControls") then modules.ControlsController = v end
+task.spawn(function()
+    pcall(function()
+        for _, v in ipairs(getgc(true)) do
+            if type(v) == "table" and rawget(v, "CurrentControls") then
+                modules.ControlsController = v
+                break
+            end
         end
-    end
+    end)
+    pcall(function()
+        local rem = ReplicatedStorage:FindFirstChild("Remotes")
+        if rem then
+            local fig = rem:FindFirstChild("Replication") and rem.Replication:FindFirstChild("Fighter")
+            if fig then
+                cachedSetControls = fig:FindFirstChild("SetControls")
+            end
+        end
+        if not cachedSetControls then
+            cachedSetControls = ReplicatedStorage.Remotes.Replication.Fighter.SetControls
+        end
+    end)
 end)
 
 local function SetDevice(use_old)
@@ -88,16 +105,11 @@ local function SetDevice(use_old)
     if key == "PC" then key = "Desktop" end
     if key == "Controller" then key = "Console" end
     local payload = map[key] or "MouseKeyboard"
-    pcall(function()
-        local rem = ReplicatedStorage:FindFirstChild("Remotes")
-        local fig = rem and rem:FindFirstChild("Replication") and rem.Replication:FindFirstChild("Fighter")
-        local sc = fig and fig:FindFirstChild("SetControls")
-        if sc then
-            sc:FireServer(payload)
-        else
-            ReplicatedStorage.Remotes.Replication.Fighter.SetControls:FireServer(payload)
-        end
-    end)
+    if cachedSetControls then
+        pcall(function()
+            cachedSetControls:FireServer(payload)
+        end)
+    end
     pcall(function()
         if modules.ControlsController then
             modules.ControlsController.CurrentControls = key
@@ -117,11 +129,17 @@ local function DeviceSpam()
     device_cancel += 1
     local token = device_cancel
     task.spawn(function()
-        local list = {"Desktop","Mobile","Console"}
+        local list = {"Desktop", "Mobile", "Console"}
+        local lastDevice = states.spoofer_state.device
         while states.spoofer_state.device_spam and token == device_cancel do
-            states.spoofer_state.device = list[math.random(1, #list)]
+            local newDevice
+            repeat
+                newDevice = list[math.random(1, #list)]
+            until newDevice ~= lastDevice
+            states.spoofer_state.device = newDevice
+            lastDevice = newDevice
             SetDevice(false)
-            task.wait(states.spoofer_state.spam_rate)
+            task.wait(math.max(states.spoofer_state.spam_rate, 0.9))
         end
         SetDevice(true)
     end)
@@ -208,7 +226,7 @@ local BackstapMultiplier = 1
 local FullAutoEnabled = false
 
 getgenv().SpinbotEnabled = false
-getgenv().SpinbotSpeed = 25
+getgenv().SpinbotSpeed = 800
 getgenv().AutoQueueEnabled = false
 getgenv().AutoLoadoutEnabled = false
 getgenv().AutoRespawnEnabled = false
@@ -722,7 +740,7 @@ LeftMiscGroup:AddToggle("DeviceSpamToggle", {
     end
 })
 LeftMiscGroup:AddSlider("SpamRateSlider", {
-    Text = "Spam Interval", Default = 0.5, Min = 0.1, Max = 3, Rounding = 1, Suffix = "s",
+    Text = "Spam Interval", Default = 1.2, Min = 0.9, Max = 3, Rounding = 1, Suffix = "s",
     Callback = function(v) states.spoofer_state.spam_rate = v end
 })
 
@@ -741,7 +759,11 @@ SpinbotGroup:AddToggle("SpinbotToggle", {
     Callback = function(v) getgenv().SpinbotEnabled = v end
 }):AddKeyPicker("SpinbotKey", {Default = "V", Text = "Spinbot Key", Mode = "Toggle", SyncToggleState = true})
 SpinbotGroup:AddSlider("SpinbotSpeedSlider", {
-    Text = "Spinbot Speed", Default = 25, Min = 5, Max = 100, Rounding = 0,
+    Text = "Spinbot Speed",
+    Default = 800,
+    Min = 350,
+    Max = 1500,
+    Rounding = 0,
     Callback = function(v) getgenv().SpinbotSpeed = v end
 })
 
