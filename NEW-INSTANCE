@@ -182,6 +182,21 @@ local RagebotEnabled = false
 local AntiKnifeEnabled = false
 local RageMode = "GUN"
 
+local RageConfig = {
+    FireRate = 0,
+    MaxDistance = 800,
+    Hitchance = 100,
+    CameraLock = true,
+    LockStrength = 1,
+    LockPart = "Head",
+    DesyncStrength = 2.4,
+    DesyncHeight = 0.7,
+    SoftVelocity = true
+}
+
+local lastRageFire = 0
+local RageDesyncTick = 0
+
 local KillSayEnabled = false
 local lastKillSayTick = 0
 local CustomKillPhrases = {
@@ -1196,15 +1211,6 @@ local function DisableRageOptimization()
     pcall(function() SoundService.Volume = 1 end)
 end
 
-local function RunInstantAutoShot()
-    pcall(function()
-        local char = LocalPlayer.Character
-        if not char then return end
-        local tool = char:FindFirstChildOfClass("Tool")
-        if tool then tool:Activate() end
-    end)
-end
-
 local function isTargetValid(plr)
     if not plr or plr == LocalPlayer then return false end
     local char = plr.Character
@@ -1655,10 +1661,18 @@ local function GetClosestTargetPlayer()
     return closest
 end
 
-local function ApplyFakePosition(myRoot, targetCFrame)
-    myRoot.CFrame = targetCFrame
-    myRoot.AssemblyLinearVelocity = Vector3.zero
-    myRoot.AssemblyAngularVelocity = Vector3.zero
+local function ReconstructRageCFrame(myRoot, targetPos)
+    if not myRoot or not targetPos then return end
+    RageDesyncTick = RageDesyncTick + 1
+    local behind = (targetPos - myRoot.Position).Unit * -RageConfig.DesyncStrength
+    local side = Vector3.new(math.sin(RageDesyncTick * 0.17) * 1.25, 0, math.cos(RageDesyncTick * 0.17) * 0.85)
+    local desyncPos = targetPos + behind + side + Vector3.new(0, RageConfig.DesyncHeight, 0)
+    myRoot.CFrame = CFrame.new(desyncPos, targetPos)
+    if RageConfig.SoftVelocity then
+        local vel = myRoot.AssemblyLinearVelocity
+        myRoot.AssemblyLinearVelocity = Vector3.new(vel.X * 0.1, vel.Y, vel.Z * 0.1)
+        myRoot.AssemblyAngularVelocity = Vector3.zero
+    end
 end
 
 local function StartFreecam()
@@ -2340,27 +2354,32 @@ RunService.RenderStepped:Connect(function(dt)
 
     if OrbitActive then
         local target = nil
-        for _, p in ipairs(Players:GetPlayers()) do if isTargetValid(p) then target = p break end end
+        for _, p in ipairs(Players:GetPlayers()) do
+            if isTargetValid(p) then target = p break end
+        end
         if target and isTargetValid(target) and target.Character and target.Character:FindFirstChild("HumanoidRootPart") then
             local hrp = target.Character.HumanoidRootPart
             local myRoot = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
             if myRoot then
-                local angle = (tickCount * (OrbitSpeed * 0.05)) * OrbitAngle
-                myRoot.CFrame = hrp.CFrame * CFrame.Angles(0, angle, 0) * CFrame.new(0, OrbitHeight, OrbitStuds)
+                local angle = (tickCount * (OrbitSpeed * 0.08)) * OrbitAngle
+                local height = OrbitHeight + math.sin(tickCount * 0.12) * 1.8
+                myRoot.CFrame = hrp.CFrame * CFrame.Angles(0, angle, 0) * CFrame.new(0, height, OrbitStuds)
+                myRoot.AssemblyLinearVelocity = Vector3.zero
+                myRoot.AssemblyAngularVelocity = Vector3.zero
             end
         else
             if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
-                local spamOffset = Vector3.new(math.random(-5937473, 5937473), math.random(1000, 5000), math.random(-5937473, 5937473))
-                LocalPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(spamOffset) * CFrame.Angles(math.rad(tickCount * 393818), 0, 0)
+                local spamOffset = Vector3.new(math.random(-8000000, 8000000), math.random(2000, 12000), math.random(-8000000, 8000000))
+                LocalPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(spamOffset) * CFrame.Angles(math.rad(tickCount * 420000), 0, 0)
             end
         end
     end
 
     if RagebotEnabled then
-        RunInstantAutoShot()
         local target = GetClosestTargetPlayer()
         CurrentTarget = target
         local myRoot = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+
         if myRoot and target and isTargetValid(target) and target.Character and target.Character:FindFirstChild("HumanoidRootPart") then
             local tChar = target.Character
             local tHrp = tChar.HumanoidRootPart
@@ -2369,32 +2388,58 @@ RunService.RenderStepped:Connect(function(dt)
             if ResolverEnabled then
                 predictedPos = GetResolvedPosition(target, optimalHitbox)
             end
-            local predictedCFrame = CFrame.new(predictedPos)
 
-            if RageMode == "GUN" then
-                if AntiKnifeEnabled then
-                    local rightCFrame = predictedCFrame * CFrame.new(2, 0, 0)
-                    ApplyFakePosition(myRoot, rightCFrame)
-                else
-                    local behindCFrame = predictedCFrame * CFrame.new(0, 0, 1.5)
-                    ApplyFakePosition(myRoot, behindCFrame)
+            ReconstructRageCFrame(myRoot, predictedPos)
+
+            if RageConfig.CameraLock then
+                local lockPart = RageConfig.LockPart == "Head" and optimalHitbox or tHrp
+                if lockPart then
+                    if RageConfig.LockStrength >= 0.95 then
+                        Camera.CFrame = CFrame.lookAt(Camera.CFrame.Position, lockPart.Position)
+                    else
+                        Camera.CFrame = Camera.CFrame:Lerp(CFrame.lookAt(Camera.CFrame.Position, lockPart.Position), RageConfig.LockStrength)
+                    end
                 end
-                Camera.CFrame = CFrame.lookAt(Camera.CFrame.Position, predictedPos)
-            elseif RageMode == "MELE" then
-                ApplyFakePosition(myRoot, predictedCFrame)
-            elseif RageMode == "KNIFE" then
-                local lateral = math.sin(tickCount * 0.35) * 3.5
-                local knifeCFrame = predictedCFrame * CFrame.new(lateral, 0, 2.5)
-                ApplyFakePosition(myRoot, knifeCFrame)
-            elseif RageMode == "BAITING SYSTEM" then
-                local angle = (tickCount * (50000000 * 0.05))
-                local baitCFrame = predictedCFrame * CFrame.Angles(0, angle, 0) * CFrame.new(0, 5000000, 5000000)
-                ApplyFakePosition(myRoot, baitCFrame)
             end
+
+            pcall(function()
+                local FighterController = require(LocalPlayer.PlayerScripts.Controllers.FighterController)
+                local util = require(ReplicatedStorage.Modules.Utility)
+                local enum = require(ReplicatedStorage.Modules.EnumLibrary)
+
+                if FighterController and FighterController.LocalFighter then
+                    local item = FighterController.LocalFighter.EquippedItem
+                    if item and tick() - lastRageFire >= RageConfig.FireRate then
+                        lastRageFire = tick()
+                        if math.random(1, 100) <= RageConfig.Hitchance then
+                            local aimCF = CFrame.lookAt(tHrp.Position, optimalHitbox.Position)
+                            local targetCF = optimalHitbox.CFrame
+                            local randomOffset = Vector3.new(
+                                (math.random() - 0.5) * 0.035,
+                                (math.random() - 0.5) * 0.035,
+                                (math.random() - 0.5) * 0.035
+                            )
+                            local aimedPos = optimalHitbox.Position + randomOffset
+                            local objSpaceHeadOffset = optimalHitbox.CFrame:ToObjectSpace(CFrame.new(aimedPos))
+                            local cameradata = {
+                                [utf8.char(1)] = {
+                                    [utf8.char(0)] = util:EncodeCFrame(aimCF),
+                                    [utf8.char(1)] = util:EncodeCFrame(targetCF),
+                                    [utf8.char(2)] = optimalHitbox,
+                                    [utf8.char(3)] = util:EncodeCFrame(objSpaceHeadOffset)
+                                }
+                            }
+                            local remote = ReplicatedStorage.Remotes.Replication.Fighter.UseItem
+                            remote:FireServer(item:Get("ObjectID"), enum:ToEnum("StartShooting"), cameradata, nil)
+                            remote:FireServer(item:Get("ObjectID"), enum:ToEnum("StartShooting"), cameradata, nil)
+                        end
+                    end
+                end
+            end)
         else
             if myRoot then
-                local spamOffset = Vector3.new(math.random(-9000000, 9000000), math.random(1000, 9000000), math.random(-9000000, 9000000))
-                ApplyFakePosition(myRoot, CFrame.new(spamOffset))
+                local spamOffset = Vector3.new(math.random(-60, 60), math.random(8, 35), math.random(-60, 60))
+                myRoot.CFrame = CFrame.new(myRoot.Position + spamOffset)
             end
         end
     end
