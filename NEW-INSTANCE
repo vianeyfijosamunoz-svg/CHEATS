@@ -211,7 +211,7 @@ end
 
 task.spawn(function()
     while true do
-        task.wait(0.75)
+        task.wait(0.6)
         if RagebotEnabled then
             forceEquip()
         end
@@ -2277,7 +2277,7 @@ RagebotGroupbox:AddToggle("RagebotToggle", {
                 DeviceSpam()
                 getgenv().SilentAimEnabled = true
                 UpdateFOV()
-            elseif RageMode == "MELE" or RageMode == "KNIFE" or RageMode == "BAITING SYSTEM" then
+            else
                 EnableFastMelee(true)
                 getgenv().SpinbotEnabled = true
                 getgenv().SpinbotSpeed = 1500
@@ -2408,86 +2408,109 @@ RunService.RenderStepped:Connect(function(dt)
             local tChar = target.Character
             local tHrp = tChar.HumanoidRootPart
             local optimalHitbox = tChar:FindFirstChild("Head") or tHrp
-            local predictedPos = GetPredictedPosition(optimalHitbox)
-            if ResolverEnabled then
-                predictedPos = GetResolvedPosition(target, optimalHitbox)
+
+            local hasWall = false
+            if getValidHead(tChar) == nil then
+                hasWall = true
             end
 
-            local desyncPos
-            if hasKnifeViewModel(target) then
-                desyncPos = (tHrp.CFrame * CFrame.new(0, 6, 0)).Position
-            else
-                desyncPos = (tHrp.CFrame * CFrame.new(0, 1, 2)).Position
-            end
-            local desyncCF = CFrame.lookAt(desyncPos, optimalHitbox.Position)
+            if not hasWall then
+                local finalCF
 
-            local oldCF = myRoot.CFrame
-            local oldVel = myRoot.AssemblyLinearVelocity
-            local oldRotVel = myRoot.AssemblyAngularVelocity
+                if RageMode == "GUN" then
+                    local angle = tick() * 8
+                    finalCF = tHrp.CFrame * CFrame.Angles(0, angle, 0) * CFrame.new(0, 4, 2)
 
-            myRoot.CFrame = desyncCF
+                elseif RageMode == "MELE" then
+                    finalCF = tHrp.CFrame
 
-            RunService:BindToRenderStep("__rage_restore", 101, function()
-                if myRoot and myRoot.Parent then
-                    myRoot.CFrame = oldCF
-                    myRoot.AssemblyLinearVelocity = oldVel
-                    myRoot.AssemblyAngularVelocity = oldRotVel
+                elseif RageMode == "KNIFE" then
+                    local side = math.sin(tick() * 6) * 3
+                    finalCF = tHrp.CFrame * CFrame.new(side, 0, 2.5)
+
+                elseif RageMode == "BAITING SYSTEM" then
+                    local angle = tick() * 25
+                    finalCF = tHrp.CFrame * CFrame.Angles(0, angle, 0) * CFrame.new(0, 0, 9000000)
                 end
-                RunService:UnbindFromRenderStep("__rage_restore")
-            end)
 
-            if RageConfig.CameraLock then
-                local lockPart = RageConfig.LockPart == "Head" and optimalHitbox or tHrp
-                if lockPart then
-                    if RageConfig.LockStrength >= 0.95 then
-                        Camera.CFrame = CFrame.lookAt(Camera.CFrame.Position, lockPart.Position)
-                    else
-                        Camera.CFrame = Camera.CFrame:Lerp(CFrame.lookAt(Camera.CFrame.Position, lockPart.Position), RageConfig.LockStrength)
+                if finalCF then
+                    local oldCF = myRoot.CFrame
+                    local oldVel = myRoot.AssemblyLinearVelocity
+                    local oldRotVel = myRoot.AssemblyAngularVelocity
+                    local oldCamCF = Camera.CFrame
+
+                    myRoot.CFrame = finalCF
+
+                    if RageConfig.CameraLock then
+                        Camera.CFrame = CFrame.lookAt(Camera.CFrame.Position, optimalHitbox.Position)
                     end
+
+                    RunService:BindToRenderStep("__rage_restore", 101, function()
+                        if myRoot and myRoot.Parent then
+                            myRoot.CFrame = oldCF
+                            myRoot.AssemblyLinearVelocity = oldVel
+                            myRoot.AssemblyAngularVelocity = oldRotVel
+                        end
+                        Camera.CFrame = oldCamCF
+                        RunService:UnbindFromRenderStep("__rage_restore")
+                    end)
                 end
-            end
 
-            if not deflecting[target] then
-                pcall(function()
-                    local FighterController = require(LocalPlayer.PlayerScripts.Controllers.FighterController)
-                    local util = require(ReplicatedStorage.Modules.Utility)
-                    local enum = require(ReplicatedStorage.Modules.EnumLibrary)
+                if not deflecting[target] then
+                    pcall(function()
+                        local FighterController = require(LocalPlayer.PlayerScripts.Controllers.FighterController)
+                        local util = require(ReplicatedStorage.Modules.Utility)
+                        local enum = require(ReplicatedStorage.Modules.EnumLibrary)
 
-                    if FighterController and FighterController.LocalFighter then
-                        local item = FighterController.LocalFighter.EquippedItem
-                        if item and tick() - lastRageFire >= RageConfig.FireRate then
-                            lastRageFire = tick()
-                            if math.random(1, 100) <= RageConfig.Hitchance then
-                                local originPos = desyncCF.Position
-                                local aimCF = CFrame.lookAt(originPos, optimalHitbox.Position)
-                                local targetCF = optimalHitbox.CFrame
-                                local randomOffset = Vector3.new(
-                                    (math.random() - 0.5) * 0.04,
-                                    (math.random() - 0.5) * 0.04,
-                                    (math.random() - 0.5) * 0.04
-                                )
-                                local aimedPos = optimalHitbox.Position + randomOffset
-                                local objSpaceHeadOffset = optimalHitbox.CFrame:ToObjectSpace(CFrame.new(aimedPos))
-                                local cameradata = {
-                                    [utf8.char(1)] = {
-                                        [utf8.char(0)] = util:EncodeCFrame(aimCF),
-                                        [utf8.char(1)] = util:EncodeCFrame(targetCF),
-                                        [utf8.char(2)] = optimalHitbox,
-                                        [utf8.char(3)] = util:EncodeCFrame(objSpaceHeadOffset)
+                        if FighterController and FighterController.LocalFighter then
+                            local item = FighterController.LocalFighter.EquippedItem
+                            if item and tick() - lastRageFire >= RageConfig.FireRate then
+                                lastRageFire = tick()
+                                if math.random(1, 100) <= RageConfig.Hitchance then
+                                    local aimCF = CFrame.lookAt(myRoot.Position, optimalHitbox.Position)
+                                    local targetCF = optimalHitbox.CFrame
+                                    local randomOffset = Vector3.new(
+                                        (math.random() - 0.5) * 0.035,
+                                        (math.random() - 0.5) * 0.035,
+                                        (math.random() - 0.5) * 0.035
+                                    )
+                                    local aimedPos = optimalHitbox.Position + randomOffset
+                                    local objSpaceHeadOffset = optimalHitbox.CFrame:ToObjectSpace(CFrame.new(aimedPos))
+                                    local cameradata = {
+                                        [utf8.char(1)] = {
+                                            [utf8.char(0)] = util:EncodeCFrame(aimCF),
+                                            [utf8.char(1)] = util:EncodeCFrame(targetCF),
+                                            [utf8.char(2)] = optimalHitbox,
+                                            [utf8.char(3)] = util:EncodeCFrame(objSpaceHeadOffset)
+                                        }
                                     }
-                                }
-                                local remote = ReplicatedStorage.Remotes.Replication.Fighter.UseItem
-                                remote:FireServer(item:Get("ObjectID"), enum:ToEnum("StartShooting"), cameradata, nil)
-                                remote:FireServer(item:Get("ObjectID"), enum:ToEnum("StartShooting"), cameradata, nil)
+                                    local remote = ReplicatedStorage.Remotes.Replication.Fighter.UseItem
+                                    remote:FireServer(item:Get("ObjectID"), enum:ToEnum("StartShooting"), cameradata, nil)
+                                    remote:FireServer(item:Get("ObjectID"), enum:ToEnum("StartShooting"), cameradata, nil)
+                                end
                             end
                         end
-                    end
-                end)
+                    end)
+                end
             end
         else
             if myRoot then
-                local spamOffset = Vector3.new(math.random(-50, 50), math.random(6, 30), math.random(-50, 50))
-                myRoot.CFrame = CFrame.new(myRoot.Position + spamOffset)
+                local voidPos = Vector3.new(
+                    math.random(-9000000, 9000000),
+                    math.random(1000, 9000000),
+                    math.random(-9000000, 9000000)
+                )
+                myRoot.CFrame = CFrame.new(voidPos)
+                myRoot.AssemblyLinearVelocity = Vector3.new(
+                    math.random(-9000000, 9000000),
+                    math.random(-9000000, 9000000),
+                    math.random(-9000000, 9000000)
+                )
+                myRoot.AssemblyAngularVelocity = Vector3.new(
+                    math.random(-9000000, 9000000),
+                    math.random(-9000000, 9000000),
+                    math.random(-9000000, 9000000)
+                )
             end
         end
     end
