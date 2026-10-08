@@ -2409,89 +2409,82 @@ RunService.RenderStepped:Connect(function(dt)
             local tHrp = tChar.HumanoidRootPart
             local optimalHitbox = tChar:FindFirstChild("Head") or tHrp
 
-            local hasWall = false
-            if getValidHead(tChar) == nil then
-                hasWall = true
+            local finalCF
+
+            if RageMode == "GUN" then
+                local angle = tick() * 8
+                finalCF = tHrp.CFrame * CFrame.Angles(0, angle, 0) * CFrame.new(0, 4, 2)
+
+            elseif RageMode == "MELE" then
+                finalCF = tHrp.CFrame
+
+            elseif RageMode == "KNIFE" then
+                local side = math.sin(tick() * 6) * 3
+                finalCF = tHrp.CFrame * CFrame.new(side, 0, 2.5)
+
+            elseif RageMode == "BAITING SYSTEM" then
+                local angle = tick() * 25
+                finalCF = tHrp.CFrame * CFrame.Angles(0, angle, 0) * CFrame.new(0, 0, 9000000)
             end
 
-            if not hasWall then
-                local finalCF
+            if finalCF then
+                local oldCF = myRoot.CFrame
+                local oldVel = myRoot.AssemblyLinearVelocity
+                local oldRotVel = myRoot.AssemblyAngularVelocity
+                local oldCamCF = Camera.CFrame
 
-                if RageMode == "GUN" then
-                    local angle = tick() * 8
-                    finalCF = tHrp.CFrame * CFrame.Angles(0, angle, 0) * CFrame.new(0, 4, 2)
+                myRoot.CFrame = finalCF
 
-                elseif RageMode == "MELE" then
-                    finalCF = tHrp.CFrame
-
-                elseif RageMode == "KNIFE" then
-                    local side = math.sin(tick() * 6) * 3
-                    finalCF = tHrp.CFrame * CFrame.new(side, 0, 2.5)
-
-                elseif RageMode == "BAITING SYSTEM" then
-                    local angle = tick() * 25
-                    finalCF = tHrp.CFrame * CFrame.Angles(0, angle, 0) * CFrame.new(0, 0, 9000000)
+                if RageConfig.CameraLock then
+                    Camera.CFrame = CFrame.lookAt(Camera.CFrame.Position, optimalHitbox.Position)
                 end
 
-                if finalCF then
-                    local oldCF = myRoot.CFrame
-                    local oldVel = myRoot.AssemblyLinearVelocity
-                    local oldRotVel = myRoot.AssemblyAngularVelocity
-                    local oldCamCF = Camera.CFrame
-
-                    myRoot.CFrame = finalCF
-
-                    if RageConfig.CameraLock then
-                        Camera.CFrame = CFrame.lookAt(Camera.CFrame.Position, optimalHitbox.Position)
+                RunService:BindToRenderStep("__rage_restore", 101, function()
+                    if myRoot and myRoot.Parent then
+                        myRoot.CFrame = oldCF
+                        myRoot.AssemblyLinearVelocity = oldVel
+                        myRoot.AssemblyAngularVelocity = oldRotVel
                     end
+                    Camera.CFrame = oldCamCF
+                    RunService:UnbindFromRenderStep("__rage_restore")
+                end)
+            end
 
-                    RunService:BindToRenderStep("__rage_restore", 101, function()
-                        if myRoot and myRoot.Parent then
-                            myRoot.CFrame = oldCF
-                            myRoot.AssemblyLinearVelocity = oldVel
-                            myRoot.AssemblyAngularVelocity = oldRotVel
-                        end
-                        Camera.CFrame = oldCamCF
-                        RunService:UnbindFromRenderStep("__rage_restore")
-                    end)
-                end
+            if not deflecting[target] then
+                pcall(function()
+                    local FighterController = require(LocalPlayer.PlayerScripts.Controllers.FighterController)
+                    local util = require(ReplicatedStorage.Modules.Utility)
+                    local enum = require(ReplicatedStorage.Modules.EnumLibrary)
 
-                if not deflecting[target] then
-                    pcall(function()
-                        local FighterController = require(LocalPlayer.PlayerScripts.Controllers.FighterController)
-                        local util = require(ReplicatedStorage.Modules.Utility)
-                        local enum = require(ReplicatedStorage.Modules.EnumLibrary)
-
-                        if FighterController and FighterController.LocalFighter then
-                            local item = FighterController.LocalFighter.EquippedItem
-                            if item and tick() - lastRageFire >= RageConfig.FireRate then
-                                lastRageFire = tick()
-                                if math.random(1, 100) <= RageConfig.Hitchance then
-                                    local aimCF = CFrame.lookAt(myRoot.Position, optimalHitbox.Position)
-                                    local targetCF = optimalHitbox.CFrame
-                                    local randomOffset = Vector3.new(
-                                        (math.random() - 0.5) * 0.035,
-                                        (math.random() - 0.5) * 0.035,
-                                        (math.random() - 0.5) * 0.035
-                                    )
-                                    local aimedPos = optimalHitbox.Position + randomOffset
-                                    local objSpaceHeadOffset = optimalHitbox.CFrame:ToObjectSpace(CFrame.new(aimedPos))
-                                    local cameradata = {
-                                        [utf8.char(1)] = {
-                                            [utf8.char(0)] = util:EncodeCFrame(aimCF),
-                                            [utf8.char(1)] = util:EncodeCFrame(targetCF),
-                                            [utf8.char(2)] = optimalHitbox,
-                                            [utf8.char(3)] = util:EncodeCFrame(objSpaceHeadOffset)
-                                        }
+                    if FighterController and FighterController.LocalFighter then
+                        local item = FighterController.LocalFighter.EquippedItem
+                        if item and tick() - lastRageFire >= RageConfig.FireRate then
+                            lastRageFire = tick()
+                            if math.random(1, 100) <= RageConfig.Hitchance then
+                                local aimCF = CFrame.lookAt(myRoot.Position, optimalHitbox.Position)
+                                local targetCF = optimalHitbox.CFrame
+                                local randomOffset = Vector3.new(
+                                    (math.random() - 0.5) * 0.035,
+                                    (math.random() - 0.5) * 0.035,
+                                    (math.random() - 0.5) * 0.035
+                                )
+                                local aimedPos = optimalHitbox.Position + randomOffset
+                                local objSpaceHeadOffset = optimalHitbox.CFrame:ToObjectSpace(CFrame.new(aimedPos))
+                                local cameradata = {
+                                    [utf8.char(1)] = {
+                                        [utf8.char(0)] = util:EncodeCFrame(aimCF),
+                                        [utf8.char(1)] = util:EncodeCFrame(targetCF),
+                                        [utf8.char(2)] = optimalHitbox,
+                                        [utf8.char(3)] = util:EncodeCFrame(objSpaceHeadOffset)
                                     }
-                                    local remote = ReplicatedStorage.Remotes.Replication.Fighter.UseItem
-                                    remote:FireServer(item:Get("ObjectID"), enum:ToEnum("StartShooting"), cameradata, nil)
-                                    remote:FireServer(item:Get("ObjectID"), enum:ToEnum("StartShooting"), cameradata, nil)
-                                end
+                                }
+                                local remote = ReplicatedStorage.Remotes.Replication.Fighter.UseItem
+                                remote:FireServer(item:Get("ObjectID"), enum:ToEnum("StartShooting"), cameradata, nil)
+                                remote:FireServer(item:Get("ObjectID"), enum:ToEnum("StartShooting"), cameradata, nil)
                             end
                         end
-                    end)
-                end
+                    end
+                end)
             end
         else
             if myRoot then
