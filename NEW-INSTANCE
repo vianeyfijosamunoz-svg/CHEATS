@@ -2412,8 +2412,7 @@ RunService.RenderStepped:Connect(function(dt)
             local finalCF
 
             if RageMode == "GUN" then
-                local angle = tick() * 8
-                finalCF = tHrp.CFrame * CFrame.Angles(0, angle, 0) * CFrame.new(0, 4, 2)
+                finalCF = tHrp.CFrame
 
             elseif RageMode == "MELE" then
                 finalCF = tHrp.CFrame
@@ -2423,8 +2422,8 @@ RunService.RenderStepped:Connect(function(dt)
                 finalCF = tHrp.CFrame * CFrame.new(side, 0, 2.5)
 
             elseif RageMode == "BAITING SYSTEM" then
-                local angle = tick() * 25
-                finalCF = tHrp.CFrame * CFrame.Angles(0, angle, 0) * CFrame.new(0, 0, 9000000)
+                local angle = tick() * 25000000
+                finalCF = tHrp.CFrame * CFrame.Angles(0, angle, 0) * CFrame.new(0, 0, 25000000)
             end
 
             if finalCF then
