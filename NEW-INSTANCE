@@ -175,6 +175,7 @@ local OrbitStuds = 2.5
 local OrbitSpeed = 500000
 local OrbitAngle = 1
 local OrbitHeight = 0
+local lastOrbitFire = 0
 
 local RagebotEnabled = false
 local AntiKnifeEnabled = false
@@ -238,19 +239,6 @@ local function updateDeflection()
     end)
 end
 
-local function hasKnifeViewModel(targetPlayer)
-    if not targetPlayer then return false end
-    local viewModels = workspace:FindFirstChild("ViewModels")
-    if not viewModels then return false end
-    local targetName = targetPlayer.Name
-    for _, model in pairs(viewModels:GetChildren()) do
-        if model:IsA("Model") and string.find(model.Name, targetName, 1, true) and string.find(model.Name, "Knife", 1, true) then
-            return true
-        end
-    end
-    return false
-end
-
 Players.PlayerRemoving:Connect(function(player)
     deflecting[player] = nil
 end)
@@ -288,11 +276,12 @@ local PriorizedVoidAttacks = false
 local PrioridadMode = "Value"
 local CurrentPrioritizedPlayer = nil
 
-local TriggerbotBetaEnabled = false
+local TriggerbotEnabled = false
 local ForgotTimeVal = 0
 local ReaccionTimeVal = 0
 local CooldawnVal = 0
 local TimeOfShooterVal = 0
+local lastTriggerFire = 0
 
 local MeleeRangeEnabled = false
 local MeleeRangeMultiplier = 1
@@ -375,23 +364,8 @@ local DamageNumbersEnabled = false
 local StreamerModeEnabled = false
 local KeybindDisplayEnabled = false
 
-local KillSoundsEnabled = false
 local SelectedKillSound = "CSGO"
 local KillSoundVolume = 1
-
-local KillSoundIds = {
-    ["Neverlose"] = "rbxassetid://9114224527",
-    ["CSGO"] = "rbxassetid://3415635180",
-    ["Among Us"] = "rbxassetid://5153700337",
-    ["Bruh"] = "rbxassetid://6607339540",
-    ["Minecraft"] = "rbxassetid://5158840470",
-    ["Oof"] = "rbxassetid://178452483",
-    ["TF2"] = "rbxassetid://2865227270",
-    ["Valorant"] = "rbxassetid://9113825145",
-    ["Fortnite"] = "rbxassetid://5153700337",
-    ["Anime Hit"] = "rbxassetid://9114224527",
-    ["Headshot Classic"] = "rbxassetid://3415635180"
-}
 
 local SkyboxPresets = {
     ["None"] = nil,
@@ -865,11 +839,6 @@ ExtraVisualsGroup:AddToggle("KeybindDisplayToggle", {
     Callback = function(v) KeybindDisplayEnabled = v end
 })
 
-KillSoundsGroup:AddToggle("KillSoundsToggle", {
-    Text = "Enable Kill Sounds",
-    Default = false,
-    Callback = function(v) KillSoundsEnabled = v end
-})
 KillSoundsGroup:AddDropdown("KillSoundDropdown", {
     Values = {"Neverlose", "CSGO", "Among Us", "Bruh", "Minecraft", "Oof", "TF2", "Valorant", "Fortnite", "Anime Hit", "Headshot Classic"},
     Default = 2,
@@ -1126,29 +1095,8 @@ Players.PlayerAdded:Connect(initESP)
 Players.PlayerRemoving:Connect(removeESP)
 for _, p in ipairs(Players:GetPlayers()) do initESP(p) end
 
-local function PlayKillSound()
-    if not KillSoundsEnabled then return end
-    local soundId = KillSoundIds[SelectedKillSound]
-    if not soundId then return end
-    local sound = Instance.new("Sound")
-    sound.SoundId = soundId
-    sound.Volume = KillSoundVolume
-    sound.PlayOnRemove = false
-    sound.Parent = SoundService
-    sound:Play()
-    sound.Ended:Connect(function()
-        sound:Destroy()
-    end)
-    task.delay(3, function()
-        if sound and sound.Parent then
-            sound:Destroy()
-        end
-    end)
-end
-
 local function SpawnDamageNumber(position, damage)
     if not DamageNumbersEnabled then return end
-    PlayKillSound()
     local billboard = Instance.new("BillboardGui")
     billboard.Size = UDim2.new(0, 100, 0, 40)
     billboard.StudsOffset = Vector3.new(math.random(-2, 2), 3, math.random(-2, 2))
@@ -1674,6 +1622,34 @@ local function getValidHead(char)
     return (result == nil or result.Instance:IsDescendantOf(char)) and head or nil
 end
 
+local function getClosestTriggerTarget()
+    local char = LocalPlayer.Character
+    if not char then return nil, nil, nil end
+    local myRoot = char:FindFirstChild("HumanoidRootPart")
+    if not myRoot then return nil, nil, nil end
+    local closestPlayer = nil
+    local closestRoot = nil
+    local closestHead = nil
+    local closestDist = 500
+    for _, player in ipairs(Players:GetPlayers()) do
+        if not isTargetValid(player) then continue end
+        local pChar = player.Character
+        if not pChar then continue end
+        local pRoot = pChar:FindFirstChild("HumanoidRootPart")
+        local pHead = pChar:FindFirstChild("Head")
+        local pHum = pChar:FindFirstChildWhichIsA("Humanoid")
+        if not (pRoot and pHead and pHum and pHum.Health > 0) then continue end
+        local dist = (myRoot.Position - pRoot.Position).Magnitude
+        if dist < closestDist then
+            closestDist = dist
+            closestPlayer = player
+            closestRoot = pRoot
+            closestHead = pHead
+        end
+    end
+    return closestPlayer, closestRoot, closestHead
+end
+
 local function GetClosestPlayerAimbot()
     local closest = nil
     local shortestDistance = FOVRadius
@@ -2121,7 +2097,7 @@ RunService.RenderStepped:Connect(function()
         if target and isTargetValid(target) then ManipulationText = "ORBITUS: " .. string.upper(target.Name) else ManipulationText = "ORBITUS: VOID" end
     elseif RagebotEnabled then
         local target = GetClosestTargetPlayer()
-        if target and isTargetValid(target) then ManipulationText = "RAGEBOT: KILLING " .. string.upper(target.Name) else ManipulationText = "RAGEBOT: VOID" end
+        if target and isTargetValid(target) then ManipulationText = "RAGEBOT: KILLING " .. string.upper(target.Name) else ManipulationText = "RAGEBOT: IDLE" end
     else
         ManipulationText = ""
     end
@@ -2192,7 +2168,7 @@ local LeftGroupbox = Tabs.Main:AddLeftGroupbox("Aimbot")
 local RightGroupbox = Tabs.Main:AddRightGroupbox("Silent Aim")
 local TriggerbotGroupbox = Tabs.Main:AddRightGroupbox("Triggerbot")
 
-TriggerbotGroupbox:AddToggle("TriggerbotBetaToggle", {Text = "ENABLED", Default = false, Callback = function(Value) TriggerbotBetaEnabled = Value end})
+TriggerbotGroupbox:AddToggle("TriggerbotBetaToggle", {Text = "ENABLED", Default = false, Callback = function(Value) TriggerbotEnabled = Value end})
 TriggerbotGroupbox:AddSlider("ForgotTimeSlider", {Text = "FORGOT TIME", Default = 0, Min = 0, Max = 35, Rounding = 0, Callback = function(Value) ForgotTimeVal = Value end})
 TriggerbotGroupbox:AddSlider("ReaccionTimeSlider", {Text = "REACCION TIME", Default = 0, Min = 0, Max = 35, Rounding = 0, Callback = function(Value) ReaccionTimeVal = Value end})
 TriggerbotGroupbox:AddSlider("CooldawnSlider", {Text = "COOLDAWN", Default = 0, Min = 0, Max = 35, Rounding = 0, Callback = function(Value) CooldawnVal = Value end})
@@ -2250,7 +2226,7 @@ RightGroupbox:AddSlider("SilentHitchanceSlider", {
 RightGroupbox:AddToggle("SilentShowFOVToggle", {Text = "SHOW FOV", Default = false, Callback = function(Value) SilentShowFOV = Value UpdateFOV() end}):AddColorPicker("SilentFOVColorPicker", {Default = Color3.fromRGB(255, 255, 255), Title = "Silent FOV Color", Callback = function(Value) SilentFOVColor = Value UpdateFOV() end})
 RightGroupbox:AddToggle("SilentFillFOVToggle", {Text = "FILL FOV", Default = false, Callback = function(Value) SilentFillFOV = Value UpdateFOV() end})
 RightGroupbox:AddSlider("SilentFOVTransparency", {Text = "TRANSPARENCY FOV", Default = 0, Min = 0, Max = 100, Rounding = 0, Suffix = "%", Callback = function(Value) SilentFOVTransparency = Value UpdateFOV() end})
-RightGroupbox:AddSlider("SilentFOVRadius", {Text = "FOV RADIUS", Default = 300, Min = 180, Max = 1000, Rounding = 0, Callback = function(Value) SilentFOVRadius = Value UpdateFOV() end})
+RightGroupbox:AddSlider("SilentFOVRadius", {Text = "FOV RADIUS", Default = 300, Min = 180, Max = 1000, Rounding = 0, Callback = function(Value) SilentFOVRadius = Value end})
 RightGroupbox:AddSlider("SilentMaxDistSlider", {Text = "MAX DISTANCE", Default = 500, Min = 100, Max = 2000, Rounding = 0, Suffix = " studs", Callback = function(Value) SilentMaxDistance = Value end})
 
 local RagebotGroupbox = Tabs.Main:AddRightGroupbox("Ragebot")
@@ -2372,13 +2348,57 @@ RunService.RenderStepped:Connect(function(dt)
         end
     end
 
+    if TriggerbotEnabled then
+        local targetPlayer, targetRoot, targetHead = getClosestTriggerTarget()
+        if targetPlayer and targetHead and targetRoot then
+            if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                pcall(function()
+                    local FighterController = require(LocalPlayer.PlayerScripts.Controllers.FighterController)
+                    if FighterController and FighterController.LocalFighter then
+                        local item = FighterController.LocalFighter.EquippedItem
+                        if item then
+                            local util = require(ReplicatedStorage.Modules.Utility)
+                            local enum = require(ReplicatedStorage.Modules.EnumLibrary)
+
+                            local aimCF = CFrame.lookAt(targetRoot.Position, targetHead.Position)
+                            local targetCF = targetHead.CFrame
+                            local randomOffset = Vector3.new(
+                                (math.random() - 0.5) * 0.1,
+                                (math.random() - 0.5) * 0.1,
+                                (math.random() - 0.5) * 0.1
+                            )
+                            local aimedPos = targetHead.Position + randomOffset
+                            local objSpaceHeadOffset = targetHead.CFrame:ToObjectSpace(CFrame.new(aimedPos))
+
+                            local cameradata = {
+                                [utf8.char(1)] = {
+                                    [utf8.char(0)] = util:EncodeCFrame(aimCF),
+                                    [utf8.char(1)] = util:EncodeCFrame(targetCF),
+                                    [utf8.char(2)] = targetHead,
+                                    [utf8.char(3)] = util:EncodeCFrame(objSpaceHeadOffset)
+                                }
+                            }
+
+                            ReplicatedStorage.Remotes.Replication.Fighter.UseItem:FireServer(
+                                item:Get("ObjectID"),
+                                enum:ToEnum("StartShooting"),
+                                cameradata,
+                                nil
+                            )
+                        end
+                    end
+                end)
+            end
+        end
+    end
+
     if OrbitActive then
         local target = nil
-        for _, p in ipairs(Players:GetPlayers()) do
-            if isTargetValid(p) then target = p break end
-        end
+        for _, p in ipairs(Players:GetPlayers()) do if isTargetValid(p) then target = p break end end
         if target and isTargetValid(target) and target.Character and target.Character:FindFirstChild("HumanoidRootPart") then
-            local hrp = target.Character.HumanoidRootPart
+            local tChar = target.Character
+            local hrp = tChar.HumanoidRootPart
+            local head = tChar:FindFirstChild("Head") or hrp
             local myRoot = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
             if myRoot then
                 local angle = (tickCount * (OrbitSpeed * 0.08)) * OrbitAngle
@@ -2387,6 +2407,41 @@ RunService.RenderStepped:Connect(function(dt)
                 myRoot.AssemblyLinearVelocity = Vector3.zero
                 myRoot.AssemblyAngularVelocity = Vector3.zero
             end
+
+            pcall(function()
+                local FighterController = require(LocalPlayer.PlayerScripts.Controllers.FighterController)
+                local util = require(ReplicatedStorage.Modules.Utility)
+                local enum = require(ReplicatedStorage.Modules.EnumLibrary)
+
+                if FighterController and FighterController.LocalFighter then
+                    local item = FighterController.LocalFighter.EquippedItem
+                    if item and tick() - lastOrbitFire >= 0 then
+                        lastOrbitFire = tick()
+                        local aimCF = CFrame.lookAt(myRoot.Position, head.Position)
+                        local targetCF = head.CFrame
+                        local randomOffset = Vector3.new(
+                            (math.random() - 0.5) * 0.1,
+                            (math.random() - 0.5) * 0.1,
+                            (math.random() - 0.5) * 0.1
+                        )
+                        local aimedPos = head.Position + randomOffset
+                        local objSpaceHeadOffset = head.CFrame:ToObjectSpace(CFrame.new(aimedPos))
+                        local cameradata = {}
+                        cameradata[utf8.char(1)] = {
+                            [utf8.char(0)] = util:EncodeCFrame(aimCF),
+                            [utf8.char(1)] = util:EncodeCFrame(targetCF),
+                            [utf8.char(2)] = head,
+                            [utf8.char(3)] = util:EncodeCFrame(objSpaceHeadOffset)
+                        }
+                        ReplicatedStorage.Remotes.Replication.Fighter.UseItem:FireServer(
+                            item:Get("ObjectID"),
+                            enum:ToEnum("StartShooting"),
+                            cameradata,
+                            nil
+                        )
+                    end
+                end
+            end)
         else
             if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
                 local spamOffset = Vector3.new(math.random(-8000000, 8000000), math.random(2000, 12000), math.random(-8000000, 8000000))
@@ -2473,25 +2528,6 @@ RunService.RenderStepped:Connect(function(dt)
                         end
                     end
                 end)
-            end
-        else
-            if myRoot then
-                local voidPos = Vector3.new(
-                    math.random(-9000000, 9000000),
-                    math.random(1000, 9000000),
-                    math.random(-9000000, 9000000)
-                )
-                myRoot.CFrame = CFrame.new(voidPos)
-                myRoot.AssemblyLinearVelocity = Vector3.new(
-                    math.random(-9000000, 9000000),
-                    math.random(-9000000, 9000000),
-                    math.random(-9000000, 9000000)
-                )
-                myRoot.AssemblyAngularVelocity = Vector3.new(
-                    math.random(-9000000, 9000000),
-                    math.random(-9000000, 9000000),
-                    math.random(-9000000, 9000000)
-                )
             end
         end
     end
