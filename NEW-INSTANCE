@@ -184,8 +184,6 @@ local RageConfig = {
     FireRate = 0,
     MaxDistance = 800,
     Hitchance = 100,
-    CameraLock = true,
-    LockStrength = 1,
     LockPart = "Head"
 }
 
@@ -450,7 +448,7 @@ local SkyboxPresets = {
 local SelectedSkybox = "None"
 
 local AntiAimEnabled = false
-local AntiAimMode = "Spin"
+local AntiAimMode = "Broken (Recomendado)"
 local AntiAimYaw = 0
 local AntiAimPitch = 0
 local AntiAimJitter = 15
@@ -949,7 +947,7 @@ AntiAimGroup:AddToggle("AntiAimToggle", {
     Callback = function(v) AntiAimEnabled = v end
 })
 AntiAimGroup:AddDropdown("AntiAimModeDropdown", {
-    Values = {"Spin", "Jitter", "Static", "Down"},
+    Values = {"Broken (Recomendado)", "Spin", "Jitter", "Static", "Down"},
     Default = 1,
     Multi = false,
     Text = "Anti-Aim Mode",
@@ -2413,14 +2411,11 @@ RunService.RenderStepped:Connect(function(dt)
 
             if RageMode == "GUN" then
                 finalCF = tHrp.CFrame
-
             elseif RageMode == "MELE" then
                 finalCF = tHrp.CFrame
-
             elseif RageMode == "KNIFE" then
                 local side = math.sin(tick() * 6) * 3
                 finalCF = tHrp.CFrame * CFrame.new(side, 0, 2.5)
-
             elseif RageMode == "BAITING SYSTEM" then
                 local angle = tick() * 25000000
                 finalCF = tHrp.CFrame * CFrame.Angles(0, angle, 0) * CFrame.new(0, 0, 25000000)
@@ -2430,13 +2425,8 @@ RunService.RenderStepped:Connect(function(dt)
                 local oldCF = myRoot.CFrame
                 local oldVel = myRoot.AssemblyLinearVelocity
                 local oldRotVel = myRoot.AssemblyAngularVelocity
-                local oldCamCF = Camera.CFrame
 
                 myRoot.CFrame = finalCF
-
-                if RageConfig.CameraLock then
-                    Camera.CFrame = CFrame.lookAt(Camera.CFrame.Position, optimalHitbox.Position)
-                end
 
                 RunService:BindToRenderStep("__rage_restore", 101, function()
                     if myRoot and myRoot.Parent then
@@ -2444,7 +2434,6 @@ RunService.RenderStepped:Connect(function(dt)
                         myRoot.AssemblyLinearVelocity = oldVel
                         myRoot.AssemblyAngularVelocity = oldRotVel
                     end
-                    Camera.CFrame = oldCamCF
                     RunService:UnbindFromRenderStep("__rage_restore")
                 end)
             end
@@ -2513,17 +2502,67 @@ RunService.RenderStepped:Connect(function(dt)
     end
 
     if AntiAimEnabled and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
-        local hrp = LocalPlayer.Character.HumanoidRootPart
-        local yaw = AntiAimYaw
-        local pitch = AntiAimPitch
-        if AntiAimMode == "Spin" then
-            yaw = (tickCount * AntiAimSpinSpeed) % 360
-        elseif AntiAimMode == "Jitter" then
-            yaw = AntiAimYaw + (math.random(-AntiAimJitter, AntiAimJitter))
-        elseif AntiAimMode == "Down" then
-            pitch = 89
+        local char = LocalPlayer.Character
+        local hrp = char.HumanoidRootPart
+
+        if AntiAimMode == "Broken (Recomendado)" then
+            local speed = AntiAimSpinSpeed * 18
+            local t = tick() * speed
+
+            local randomOffset = Vector3.new(
+                math.sin(t * 1.7) * 4,
+                math.cos(t * 2.3) * 3.5,
+                math.sin(t * 1.1) * 4
+            )
+
+            hrp.CFrame = CFrame.new(hrp.Position + randomOffset * 0.015) * CFrame.Angles(
+                math.rad(math.sin(t) * 180),
+                math.rad(t * 3),
+                math.rad(math.cos(t * 1.4) * 180)
+            )
+
+            local head = char:FindFirstChild("Head")
+            local upperTorso = char:FindFirstChild("UpperTorso")
+            local lowerTorso = char:FindFirstChild("LowerTorso")
+
+            if head and upperTorso and lowerTorso then
+                head.CFrame = lowerTorso.CFrame * CFrame.new(0, -1.8, 0) * CFrame.Angles(math.rad(180), t * 2, 0)
+            end
+
+            local limbs = {
+                "LeftUpperArm", "LeftLowerArm", "LeftHand",
+                "RightUpperArm", "RightLowerArm", "RightHand",
+                "LeftUpperLeg", "LeftLowerLeg", "LeftFoot",
+                "RightUpperLeg", "RightLowerLeg", "RightFoot"
+            }
+
+            for i, limbName in ipairs(limbs) do
+                local part = char:FindFirstChild(limbName)
+                if part then
+                    local chaos = t + i * 1.7
+                    part.CFrame = hrp.CFrame * CFrame.new(
+                        math.sin(chaos * 2.1) * 3.5,
+                        math.cos(chaos * 1.8) * 3.2,
+                        math.sin(chaos * 2.7) * 3.5
+                    ) * CFrame.Angles(
+                        math.rad(math.sin(chaos) * 360),
+                        math.rad(math.cos(chaos * 1.3) * 360),
+                        math.rad(math.sin(chaos * 0.9) * 360)
+                    )
+                end
+            end
+        else
+            local yaw = AntiAimYaw
+            local pitch = AntiAimPitch
+            if AntiAimMode == "Spin" then
+                yaw = (tickCount * AntiAimSpinSpeed) % 360
+            elseif AntiAimMode == "Jitter" then
+                yaw = AntiAimYaw + (math.random(-AntiAimJitter, AntiAimJitter))
+            elseif AntiAimMode == "Down" then
+                pitch = 89
+            end
+            hrp.CFrame = CFrame.new(hrp.Position) * CFrame.Angles(math.rad(pitch), math.rad(yaw), 0)
         end
-        hrp.CFrame = CFrame.new(hrp.Position) * CFrame.Angles(math.rad(pitch), math.rad(yaw), 0)
     end
 end)
 
