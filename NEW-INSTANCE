@@ -1,4 +1,4 @@
-local RIVALS_GAME_ID = 6035872082
+Local RIVALS_GAME_ID = 6035872082
 local function notSupportedKick()
     local msg = "this game not supported"
     warn("[shako.win] " .. msg .. " | GameId=" .. tostring(game.GameId))
@@ -56,6 +56,63 @@ local Camera = Workspace.CurrentCamera
 local LocalPlayer = Players.LocalPlayer
 local TweenService = game:GetService("TweenService")
 local CoreGui = game:GetService("CoreGui")
+local Stats = game:GetService("Stats")
+
+-- Watermark Elements
+local WatermarkBG = Drawing.new("Square")
+WatermarkBG.Filled = true
+WatermarkBG.Color = Color3.fromRGB(18, 18, 22)
+WatermarkBG.Transparency = 0.85
+WatermarkBG.Visible = true
+WatermarkBG.ZIndex = 1000
+
+local WatermarkBorder = Drawing.new("Square")
+WatermarkBorder.Filled = false
+WatermarkBorder.Thickness = 1
+WatermarkBorder.Color = Color3.fromRGB(0, 255, 128)
+WatermarkBorder.Visible = true
+WatermarkBorder.ZIndex = 1001
+
+local WatermarkText = Drawing.new("Text")
+WatermarkText.Visible = true
+WatermarkText.Center = false
+WatermarkText.Outline = true
+WatermarkText.OutlineColor = Color3.fromRGB(0, 0, 0)
+WatermarkText.Size = 13
+WatermarkText.Color = Color3.fromRGB(240, 240, 240)
+WatermarkText.Position = Vector2.new(18, 16)
+WatermarkText.ZIndex = 1002
+
+local frameCount = 0
+local lastFPSCheck = tick()
+local currentFPS = 60
+
+local function UpdateWatermark()
+    frameCount += 1
+    local now = tick()
+    if now - lastFPSCheck >= 1 then
+        currentFPS = math.floor(frameCount / (now - lastFPSCheck))
+        frameCount = 0
+        lastFPSCheck = now
+    end
+
+    local ping = 0
+    pcall(function()
+        ping = math.floor(Stats.Network.ServerStatsItem["Data Ping"]:GetValue())
+    end)
+
+    local username = LocalPlayer and LocalPlayer.Name or "User"
+    local textStr = string.format("APOCALYPSE V3 | RIVALS | PREMIUM BUILD | %s | %d FPS | %d MS", username, currentFPS, ping)
+    
+    WatermarkText.Text = textStr
+    local textBounds = WatermarkText.TextBounds
+
+    WatermarkBG.Position = Vector2.new(12, 12)
+    WatermarkBG.Size = Vector2.new(textBounds.X + 12, textBounds.Y + 8)
+
+    WatermarkBorder.Position = Vector2.new(12, 12)
+    WatermarkBorder.Size = Vector2.new(textBounds.X + 12, textBounds.Y + 8)
+end
 
 local states = {
     spoofer_state = {
@@ -1801,6 +1858,7 @@ local function DoAutoReload()
 end
 
 RunService.RenderStepped:Connect(function()
+    UpdateWatermark()
     UpdateFOV()
     UpdateCrosshair()
     UpdateRadar()
@@ -2203,7 +2261,7 @@ LeftGroupbox:AddToggle("AimbotWallCheckToggle", {Text = "WALL CHECK", Default = 
 LeftGroupbox:AddToggle("ShowFOVToggle", {Text = "SHOW FOV", Default = false, Callback = function(Value) ShowFOV = Value UpdateFOV() end}):AddColorPicker("FOVColorPicker", {Default = Color3.fromRGB(255, 255, 255), Title = "FOV Color", Callback = function(Value) FOVColor = Value UpdateFOV() end})
 LeftGroupbox:AddToggle("FillFOVToggle", {Text = "FILL FOV", Default = false, Callback = function(Value) FillFOV = Value UpdateFOV() end})
 LeftGroupbox:AddSlider("FOVTransparency", {Text = "TRANSPARENCY FOV", Default = 0, Min = 0, Max = 100, Rounding = 0, Suffix = "%", Callback = function(Value) FOVTransparency = Value UpdateFOV() end})
-LeftGroupbox:AddSlider("FOVRadius", {Text = "FOV RADIUS", Default = 300, Min = 180, Max = 1000, Rounding = 0, Callback = function(Value) FOVRadius = Value UpdateFOV() end})
+LeftGroupbox:AddSlider("FOVRadius", {Text = "FOV RADIUS", Default = 300, Min = 180, Max = 1000, Rounding = 0, Callback = function(Value) FOVRadius = Value end})
 
 local PredictionGroup = Tabs.Main:AddLeftGroupbox("Prediction (solo Aimbot)")
 PredictionGroup:AddToggle("PredictionToggle", {
@@ -2705,6 +2763,7 @@ MenuGroup:AddButton("Unload", function()
     DisableRageOptimization()
     StopFreecam()
     if ScreenGui then ScreenGui:Destroy() end
+    pcall(function() WatermarkBG:Remove() WatermarkBorder:Remove() WatermarkText:Remove() end)
     for _, line in pairs(Crosshair) do pcall(function() line:Remove() end) end
     for _, d in pairs(radarDots) do pcall(function() d:Remove() end) end
     pcall(function() RadarBG:Remove() RadarBorder:Remove() RadarCenter:Remove() end)
