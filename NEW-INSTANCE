@@ -1,4 +1,4 @@
-Local RIVALS_GAME_ID = 6035872082
+local RIVALS_GAME_ID = 6035872082
 local function notSupportedKick()
     local msg = "this game not supported"
     warn("[shako.win] " .. msg .. " | GameId=" .. tostring(game.GameId))
@@ -366,6 +366,9 @@ local DamageNumbersEnabled = false
 local StreamerModeEnabled = false
 local KeybindDisplayEnabled = false
 
+local SelectedKillSound = "CSGO"
+local KillSoundVolume = 1
+
 local SkyboxPresets = {
     ["None"] = nil,
     ["Space"] = {
@@ -497,6 +500,7 @@ local LeftVisualsGroup = Tabs.Visuals:AddLeftGroupbox("World & Environment")
 local RightVisualsGroup = Tabs.Visuals:AddRightGroupbox("Lighting & Post-Processing")
 local CrosshairGroup = Tabs.Visuals:AddLeftGroupbox("Custom Crosshair")
 local ExtraVisualsGroup = Tabs.Visuals:AddRightGroupbox("Extra Visuals")
+local KillSoundsGroup = Tabs.Visuals:AddLeftGroupbox("Kill Sounds")
 
 local defaultLighting = {
     Brightness = Lighting.Brightness,
@@ -835,6 +839,22 @@ ExtraVisualsGroup:AddToggle("KeybindDisplayToggle", {
     Text = "Keybind Display",
     Default = false,
     Callback = function(v) KeybindDisplayEnabled = v end
+})
+
+KillSoundsGroup:AddDropdown("KillSoundDropdown", {
+    Values = {"Neverlose", "CSGO", "Among Us", "Bruh", "Minecraft", "Oof", "TF2", "Valorant", "Fortnite", "Anime Hit", "Headshot Classic"},
+    Default = 2,
+    Multi = false,
+    Text = "Sound",
+    Callback = function(v) SelectedKillSound = v end
+})
+KillSoundsGroup:AddSlider("KillSoundVolumeSlider", {
+    Text = "Volume",
+    Default = 1,
+    Min = 0.1,
+    Max = 2,
+    Rounding = 1,
+    Callback = function(v) KillSoundVolume = v end
 })
 
 local LeftMiscGroup = Tabs.MISC:AddLeftGroupbox("Device Spoofer")
