@@ -279,14 +279,6 @@ local CurrentPrioritizedPlayer = nil
 
 local TriggerbotEnabled = false
 local TriggerbotWallCheck = false
-local TriggerbotShowFOV = false
-local TriggerbotFillFOV = false
-local TriggerbotFOVTransparency = 0
-local TriggerbotFOVRadius = 300
-local TriggerbotMaxDistance = 500
-local TriggerbotFOVColor = Color3.fromRGB(255, 255, 255)
-local triggerbotActiveTargetPos = nil
-
 local ForgotTimeVal = 0
 local ReaccionTimeVal = 0
 local CooldawnVal = 0
@@ -1368,17 +1360,6 @@ SilentFOVCircle.Transparency = 1
 SilentFOVCircle.Color = SilentFOVColor
 SilentFOVCircle.Position = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
 
-local TriggerbotFOVCircle = Drawing.new("Circle")
-TriggerbotFOVCircle.Thickness = 1.5
-TriggerbotFOVCircle.NumSides = 64
-TriggerbotFOVCircle.Radius = TriggerbotFOVRadius
-TriggerbotFOVCircle.Filled = false
-TriggerbotFOVCircle.Visible = false
-TriggerbotFOVCircle.ZIndex = 999
-TriggerbotFOVCircle.Transparency = 1
-TriggerbotFOVCircle.Color = TriggerbotFOVColor
-TriggerbotFOVCircle.Position = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
-
 local Crosshair = {
     Top = Drawing.new("Line"),
     Bottom = Drawing.new("Line"),
@@ -1477,20 +1458,12 @@ local function UpdateFOV()
     FOVCircle.Filled = FillFOV
     FOVCircle.Transparency = 1 - (FOVTransparency / 100)
     FOVCircle.Visible = ShowFOV and AimbotEnabled
-
     SilentFOVCircle.Position = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
     SilentFOVCircle.Radius = SilentFOVRadius
     SilentFOVCircle.Color = SilentFOVColor
     SilentFOVCircle.Filled = SilentFillFOV
     SilentFOVCircle.Transparency = 1 - (SilentFOVTransparency / 100)
     SilentFOVCircle.Visible = SilentShowFOV and getgenv().SilentAimEnabled
-
-    TriggerbotFOVCircle.Position = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
-    TriggerbotFOVCircle.Radius = TriggerbotFOVRadius
-    TriggerbotFOVCircle.Color = TriggerbotFOVColor
-    TriggerbotFOVCircle.Filled = TriggerbotFillFOV
-    TriggerbotFOVCircle.Transparency = 1 - (TriggerbotFOVTransparency / 100)
-    TriggerbotFOVCircle.Visible = TriggerbotShowFOV and TriggerbotEnabled
 end
 
 local function UpdateCrosshair()
@@ -1659,9 +1632,7 @@ local function getClosestTriggerTarget()
     local closestPlayer = nil
     local closestRoot = nil
     local closestHead = nil
-    local closestDist = TriggerbotMaxDistance
-    local screenCenter = Camera.ViewportSize / 2
-
+    local closestDist = 500
     for _, player in ipairs(Players:GetPlayers()) do
         if not isTargetValid(player) then continue end
         local pChar = player.Character
@@ -1671,24 +1642,17 @@ local function getClosestTriggerTarget()
         local pHum = pChar:FindFirstChildWhichIsA("Humanoid")
         if not (pRoot and pHead and pHum and pHum.Health > 0) then continue end
         
-        local distFromMe = (pRoot.Position - myRoot.Position).Magnitude
-        if distFromMe > TriggerbotMaxDistance then continue end
+        if TriggerbotWallCheck then
+            local valid = getValidHead(pChar)
+            if not valid then continue end
+        end
 
-        local headPos, headOnScreen = Camera:WorldToViewportPoint(pHead.Position)
-        local fovDist = (Vector2.new(headPos.X, headPos.Y) - screenCenter).Magnitude
-        if headOnScreen and fovDist <= TriggerbotFOVRadius then
-            if TriggerbotWallCheck then
-                local valid = getValidHead(pChar)
-                if not valid then continue end
-            end
-
-            local dist = (myRoot.Position - pRoot.Position).Magnitude
-            if dist < closestDist then
-                closestDist = dist
-                closestPlayer = player
-                closestRoot = pRoot
-                closestHead = pHead
-            end
+        local dist = (myRoot.Position - pRoot.Position).Magnitude
+        if dist < closestDist then
+            closestDist = dist
+            closestPlayer = player
+            closestRoot = pRoot
+            closestHead = pHead
         end
     end
     return closestPlayer, closestRoot, closestHead
@@ -1846,43 +1810,6 @@ RunService.RenderStepped:Connect(function()
     CheckKills()
     CheckDamageNumbers()
     DoAutoReload()
-
-    if not TriggerbotEnabled then
-        triggerbotActiveTargetPos = nil
-    else
-        local bestHead = nil
-        local shortestDist = 9e9
-        local screenCenter = Camera.ViewportSize / 2
-
-        for _, plr in pairs(Players:GetPlayers()) do
-            local char = plr.Character
-            if char and isTargetValid(plr) then
-                local head = char:FindFirstChild("Head")
-                if head then
-                    local distFromMe = (head.Position - Camera.CFrame.Position).Magnitude
-                    local headPos, headOnScreen = Camera:WorldToViewportPoint(head.Position)
-                    local fovDist = (Vector2.new(headPos.X, headPos.Y) - screenCenter).Magnitude
-
-                    if headOnScreen and distFromMe <= TriggerbotMaxDistance and fovDist <= TriggerbotFOVRadius then
-                        if fovDist < shortestDist then
-                            if TriggerbotWallCheck then
-                                local valid = getValidHead(char)
-                                if valid then 
-                                    shortestDist = fovDist
-                                    bestHead = valid 
-                                end
-                            else
-                                shortestDist = fovDist
-                                bestHead = head
-                            end
-                        end
-                    end
-                end
-            end
-        end
-        
-        triggerbotActiveTargetPos = bestHead and bestHead.Position or nil
-    end
 
     if not getgenv().SilentAimEnabled then 
         activeTargetPos = nil
@@ -2202,12 +2129,9 @@ end)
 
 local oldIndex
 oldIndex = hookmetamethod(game, "__index", newcclosure(function(self, idx)
-    local targetToUse = activeTargetPos or triggerbotActiveTargetPos
-    if ((getgenv().SilentAimEnabled and activeTargetPos) or (TriggerbotEnabled and triggerbotActiveTargetPos)) and not checkcaller() and idx == "ViewportSize" and self == Camera then
-        if targetToUse then
-            local pos, on = Camera:WorldToViewportPoint(targetToUse)
-            if on then return Vector2.new(pos.X * 2, pos.Y * 2) end
-        end
+    if getgenv().SilentAimEnabled and activeTargetPos and not checkcaller() and idx == "ViewportSize" and self == Camera then
+        local pos, on = Camera:WorldToViewportPoint(activeTargetPos)
+        if on then return Vector2.new(pos.X * 2, pos.Y * 2) end
     end
     return oldIndex(self, idx)
 end))
@@ -2267,13 +2191,8 @@ local LeftGroupbox = Tabs.Main:AddLeftGroupbox("Aimbot")
 local RightGroupbox = Tabs.Main:AddRightGroupbox("Silent Aim")
 local TriggerbotGroupbox = Tabs.Main:AddRightGroupbox("Triggerbot")
 
-TriggerbotGroupbox:AddToggle("TriggerbotBetaToggle", {Text = "ENABLED", Default = false, Callback = function(Value) TriggerbotEnabled = Value UpdateFOV() end})
+TriggerbotGroupbox:AddToggle("TriggerbotBetaToggle", {Text = "ENABLED", Default = false, Callback = function(Value) TriggerbotEnabled = Value end})
 TriggerbotGroupbox:AddToggle("TriggerbotWallCheckToggle", {Text = "WALL CHECK", Default = false, Callback = function(Value) TriggerbotWallCheck = Value end})
-TriggerbotGroupbox:AddToggle("TriggerbotShowFOVToggle", {Text = "SHOW FOV", Default = false, Callback = function(Value) TriggerbotShowFOV = Value UpdateFOV() end}):AddColorPicker("TriggerbotFOVColorPicker", {Default = Color3.fromRGB(255, 255, 255), Title = "Triggerbot FOV Color", Callback = function(Value) TriggerbotFOVColor = Value UpdateFOV() end})
-TriggerbotGroupbox:AddToggle("TriggerbotFillFOVToggle", {Text = "FILL FOV", Default = false, Callback = function(Value) TriggerbotFillFOV = Value UpdateFOV() end})
-TriggerbotGroupbox:AddSlider("TriggerbotFOVTransparency", {Text = "TRANSPARENCY FOV", Default = 0, Min = 0, Max = 100, Rounding = 0, Suffix = "%", Callback = function(Value) TriggerbotFOVTransparency = Value UpdateFOV() end})
-TriggerbotGroupbox:AddSlider("TriggerbotFOVRadius", {Text = "FOV RADIUS", Default = 300, Min = 50, Max = 1000, Rounding = 0, Callback = function(Value) TriggerbotFOVRadius = Value UpdateFOV() end})
-TriggerbotGroupbox:AddSlider("TriggerbotMaxDistSlider", {Text = "MAX DISTANCE", Default = 500, Min = 50, Max = 5000, Rounding = 0, Suffix = " studs", Callback = function(Value) TriggerbotMaxDistance = Value end})
 TriggerbotGroupbox:AddSlider("ForgotTimeSlider", {Text = "FORGOT TIME", Default = 0, Min = 0, Max = 35, Rounding = 0, Callback = function(Value) ForgotTimeVal = Value end})
 TriggerbotGroupbox:AddSlider("ReaccionTimeSlider", {Text = "REACCION TIME", Default = 0, Min = 0, Max = 35, Rounding = 0, Callback = function(Value) ReaccionTimeVal = Value end})
 TriggerbotGroupbox:AddSlider("CooldawnSlider", {Text = "COOLDAWN", Default = 0, Min = 0, Max = 35, Rounding = 0, Callback = function(Value) CooldawnVal = Value end})
@@ -2791,7 +2710,6 @@ MenuGroup:AddButton("Unload", function()
     pcall(function() RadarBG:Remove() RadarBorder:Remove() RadarCenter:Remove() end)
     for _, v in pairs(TargetHUD) do pcall(function() v:Remove() end) end
     pcall(function() KeybindDisplay:Remove() end)
-    pcall(function() TriggerbotFOVCircle:Remove() end)
     for _, p in pairs(chamsCache) do
         if p.Highlight then pcall(function() p.Highlight:Destroy() end) end
     end
