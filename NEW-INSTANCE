@@ -163,13 +163,11 @@ local SilentFOVTransparency = 0
 local SilentFOVRadius = 300
 local SilentFOVColor = Color3.fromRGB(255, 255, 255)
 local SilentMaxDistance = 500
+local SilentHitpart = "Head"
 local SilentHitchance = 100
 local activeTargetPos = nil
 local PredictionEnabled = true
 local PredictionAmount = 0.185
-
--- Variable global para la parte del cuerpo seleccionada (15 partes)
-local TargetHitpart = "Head"
 
 local ManipulationText = ""
 
@@ -293,6 +291,7 @@ local ForgotTimeVal = 0
 local ReaccionTimeVal = 0
 local CooldawnVal = 0
 local TimeOfShooterVal = 0
+local lastTriggerFire = 0
 
 local MeleeRangeEnabled = false
 local MeleeRangeMultiplier = 1
@@ -1642,24 +1641,14 @@ local function UpdateTargetHUD()
     TargetHUD.HealthBar.Visible = true
 end
 
--- Función auxiliar para obtener la parte objetivo según el Hitpart seleccionado
-local function getTargetPart(char)
-    if not char then return nil end
-    local part = char:FindFirstChild(TargetHitpart)
-    if not part then
-        part = char:FindFirstChild("Head") or char:FindFirstChild("HumanoidRootPart")
-    end
-    return part
-end
-
-local function getValidPart(char)
-    local part = getTargetPart(char)
-    if not part then return nil end
+local function getValidHead(char)
+    local head = char:FindFirstChild("Head")
+    if not head then return nil end
     local params = RaycastParams.new()
     params.FilterType = Enum.RaycastFilterType.Exclude
     params.FilterDescendantsInstances = {LocalPlayer.Character, Camera}
-    local result = Workspace:Raycast(Camera.CFrame.Position, (part.Position - Camera.CFrame.Position).Unit * 1000, params)
-    return (result == nil or result.Instance:IsDescendantOf(char)) and part or nil
+    local result = Workspace:Raycast(Camera.CFrame.Position, (head.Position - Camera.CFrame.Position).Unit * 1000, params)
+    return (result == nil or result.Instance:IsDescendantOf(char)) and head or nil
 end
 
 local function getClosestTriggerTarget()
@@ -1669,7 +1658,7 @@ local function getClosestTriggerTarget()
     if not myRoot then return nil, nil, nil end
     local closestPlayer = nil
     local closestRoot = nil
-    local closestPart = nil
+    local closestHead = nil
     local closestDist = TriggerbotMaxDistance
     local screenCenter = Camera.ViewportSize / 2
 
@@ -1678,18 +1667,18 @@ local function getClosestTriggerTarget()
         local pChar = player.Character
         if not pChar then continue end
         local pRoot = pChar:FindFirstChild("HumanoidRootPart")
-        local pPart = getTargetPart(pChar)
+        local pHead = pChar:FindFirstChild("Head")
         local pHum = pChar:FindFirstChildWhichIsA("Humanoid")
-        if not (pRoot and pPart and pHum and pHum.Health > 0) then continue end
+        if not (pRoot and pHead and pHum and pHum.Health > 0) then continue end
         
         local distFromMe = (pRoot.Position - myRoot.Position).Magnitude
         if distFromMe > TriggerbotMaxDistance then continue end
 
-        local partPos, partOnScreen = Camera:WorldToViewportPoint(pPart.Position)
-        local fovDist = (Vector2.new(partPos.X, partPos.Y) - screenCenter).Magnitude
-        if partOnScreen and fovDist <= TriggerbotFOVRadius then
+        local headPos, headOnScreen = Camera:WorldToViewportPoint(pHead.Position)
+        local fovDist = (Vector2.new(headPos.X, headPos.Y) - screenCenter).Magnitude
+        if headOnScreen and fovDist <= TriggerbotFOVRadius then
             if TriggerbotWallCheck then
-                local valid = getValidPart(pChar)
+                local valid = getValidHead(pChar)
                 if not valid then continue end
             end
 
@@ -1698,11 +1687,11 @@ local function getClosestTriggerTarget()
                 closestDist = dist
                 closestPlayer = player
                 closestRoot = pRoot
-                closestPart = pPart
+                closestHead = pHead
             end
         end
     end
-    return closestPlayer, closestRoot, closestPart
+    return closestPlayer, closestRoot, closestHead
 end
 
 local function hasKnifeViewModel(targetPlayer)
@@ -1725,11 +1714,11 @@ local function GetClosestPlayerAimbot()
     local shortestDistance = FOVRadius
     for _, player in pairs(Players:GetPlayers()) do
         if isTargetValid(player) and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
-            local part = getTargetPart(player.Character)
-            if AimbotWallCheck then local valid = getValidPart(player.Character) if not valid then continue end end
-            local predicted = GetPredictedPosition(part)
+            local head = player.Character:FindFirstChild("Head") or player.Character.HumanoidRootPart
+            if AimbotWallCheck then local valid = getValidHead(player.Character) if not valid then continue end end
+            local predicted = GetPredictedPosition(head)
             if ResolverEnabled then
-                predicted = GetResolvedPosition(player, part)
+                predicted = GetResolvedPosition(player, head)
             end
             local params = RaycastParams.new()
             params.FilterType = Enum.RaycastFilterType.Exclude
@@ -1861,30 +1850,30 @@ RunService.RenderStepped:Connect(function()
     if not TriggerbotEnabled then
         triggerbotActiveTargetPos = nil
     else
-        local bestPart = nil
+        local bestHead = nil
         local shortestDist = 9e9
         local screenCenter = Camera.ViewportSize / 2
 
         for _, plr in pairs(Players:GetPlayers()) do
             local char = plr.Character
             if char and isTargetValid(plr) then
-                local part = getTargetPart(char)
-                if part then
-                    local distFromMe = (part.Position - Camera.CFrame.Position).Magnitude
-                    local partPos, partOnScreen = Camera:WorldToViewportPoint(part.Position)
-                    local fovDist = (Vector2.new(partPos.X, partPos.Y) - screenCenter).Magnitude
+                local head = char:FindFirstChild("Head")
+                if head then
+                    local distFromMe = (head.Position - Camera.CFrame.Position).Magnitude
+                    local headPos, headOnScreen = Camera:WorldToViewportPoint(head.Position)
+                    local fovDist = (Vector2.new(headPos.X, headPos.Y) - screenCenter).Magnitude
 
-                    if partOnScreen and distFromMe <= TriggerbotMaxDistance and fovDist <= TriggerbotFOVRadius then
+                    if headOnScreen and distFromMe <= TriggerbotMaxDistance and fovDist <= TriggerbotFOVRadius then
                         if fovDist < shortestDist then
                             if TriggerbotWallCheck then
-                                local valid = getValidPart(char)
+                                local valid = getValidHead(char)
                                 if valid then 
                                     shortestDist = fovDist
-                                    bestPart = valid 
+                                    bestHead = valid 
                                 end
                             else
                                 shortestDist = fovDist
-                                bestPart = part
+                                bestHead = head
                             end
                         end
                     end
@@ -1892,7 +1881,7 @@ RunService.RenderStepped:Connect(function()
             end
         end
         
-        triggerbotActiveTargetPos = bestPart and bestPart.Position or nil
+        triggerbotActiveTargetPos = bestHead and bestHead.Position or nil
     end
 
     if not getgenv().SilentAimEnabled then 
@@ -1904,20 +1893,20 @@ RunService.RenderStepped:Connect(function()
         for _, plr in pairs(Players:GetPlayers()) do
             local char = plr.Character
             if char and isTargetValid(plr) then
-                local part = getTargetPart(char)
+                local part = char:FindFirstChild(SilentHitpart) or char:FindFirstChild("Head") or char:FindFirstChild("HumanoidRootPart")
                 if part then
                     local pos = part.Position
                     if ResolverEnabled then
                         pos = GetResolvedPosition(plr, part)
                     end
                     local distFromMe = (pos - Camera.CFrame.Position).Magnitude
-                    local partPos, headOnScreen = Camera:WorldToViewportPoint(pos)
-                    local fovDist = (Vector2.new(partPos.X, partPos.Y) - screenCenter).Magnitude
+                    local headPos, headOnScreen = Camera:WorldToViewportPoint(pos)
+                    local fovDist = (Vector2.new(headPos.X, headPos.Y) - screenCenter).Magnitude
                     if headOnScreen and distFromMe <= SilentMaxDistance and fovDist <= SilentFOVRadius then
                         if math.random(1, 100) <= SilentHitchance then
                             if fovDist < shortestDist then
                                 if SilentWallCheck then
-                                    local valid = getValidPart(char)
+                                    local valid = getValidHead(char)
                                     if valid then 
                                         shortestDist = fovDist
                                         bestPart = part 
@@ -2278,33 +2267,6 @@ local LeftGroupbox = Tabs.Main:AddLeftGroupbox("Aimbot")
 local RightGroupbox = Tabs.Main:AddRightGroupbox("Silent Aim")
 local TriggerbotGroupbox = Tabs.Main:AddRightGroupbox("Triggerbot")
 
--- DROPDOWN UNIFICADO CON 15 PARTES DEL CUERPO
-TriggerbotGroupbox:AddDropdown("GlobalHitpartDropdown", {
-    Values = {
-        "Head",
-        "HumanoidRootPart",
-        "Torso",
-        "UpperTorso",
-        "LowerTorso",
-        "LeftArm",
-        "RightArm",
-        "LeftLeg",
-        "RightLeg",
-        "LeftUpperArm",
-        "RightUpperArm",
-        "LeftLowerArm",
-        "RightLowerArm",
-        "LeftUpperLeg",
-        "RightUpperLeg"
-    },
-    Default = 1,
-    Multi = false,
-    Text = "Target Hitpart (Global)",
-    Callback = function(v) 
-        TargetHitpart = v 
-    end
-})
-
 TriggerbotGroupbox:AddToggle("TriggerbotBetaToggle", {Text = "ENABLED", Default = false, Callback = function(Value) TriggerbotEnabled = Value UpdateFOV() end})
 TriggerbotGroupbox:AddToggle("TriggerbotWallCheckToggle", {Text = "WALL CHECK", Default = false, Callback = function(Value) TriggerbotWallCheck = Value end})
 TriggerbotGroupbox:AddToggle("TriggerbotShowFOVToggle", {Text = "SHOW FOV", Default = false, Callback = function(Value) TriggerbotShowFOV = Value UpdateFOV() end}):AddColorPicker("TriggerbotFOVColorPicker", {Default = Color3.fromRGB(255, 255, 255), Title = "Triggerbot FOV Color", Callback = function(Value) TriggerbotFOVColor = Value UpdateFOV() end})
@@ -2350,6 +2312,13 @@ BackstapGroupbox:AddSlider("BackstapSlider", {Text = "Backstap Custom", Default 
 
 RightGroupbox:AddToggle("SilentAimToggle", {Text = "ENABLED (Silent)", Default = false, Callback = function(Value) getgenv().SilentAimEnabled = Value UpdateFOV() end}):AddKeyPicker("SilentAimKey", {Default = "Q", Text = "Silent Aim Keybind", Mode = "Toggle", SyncToggleState = true})
 RightGroupbox:AddToggle("SilentWallCheckToggle", {Text = "WALL CHECK", Default = false, Callback = function(Value) SilentWallCheck = Value end})
+RightGroupbox:AddDropdown("SilentHitpartDropdown", {
+    Values = {"Head", "HumanoidRootPart"},
+    Default = 1,
+    Multi = false,
+    Text = "Hitpart",
+    Callback = function(v) SilentHitpart = v end
+})
 RightGroupbox:AddSlider("SilentHitchanceSlider", {
     Text = "Hitchance",
     Default = 100,
@@ -2473,11 +2442,11 @@ RunService.RenderStepped:Connect(function(dt)
         local target = GetClosestPlayerAimbot()
         if target and isTargetValid(target) and target.Character then
             CurrentTarget = target
-            local part = getTargetPart(target.Character)
-            if part then
-                local predicted = GetPredictedPosition(part)
+            local head = target.Character:FindFirstChild("Head") or target.Character:FindFirstChild("HumanoidRootPart")
+            if head then
+                local predicted = GetPredictedPosition(head)
                 if ResolverEnabled then
-                    predicted = GetResolvedPosition(target, part)
+                    predicted = GetResolvedPosition(target, head)
                 end
                 Camera.CFrame = CFrame.new(Camera.CFrame.Position, predicted)
             end
@@ -2485,8 +2454,8 @@ RunService.RenderStepped:Connect(function(dt)
     end
 
     if TriggerbotEnabled then
-        local targetPlayer, targetRoot, targetPart = getClosestTriggerTarget()
-        if targetPlayer and targetPart and targetRoot then
+        local targetPlayer, targetRoot, targetHead = getClosestTriggerTarget()
+        if targetPlayer and targetHead and targetRoot then
             if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
                 pcall(function()
                     local FighterController = require(LocalPlayer.PlayerScripts.Controllers.FighterController)
@@ -2496,21 +2465,21 @@ RunService.RenderStepped:Connect(function(dt)
                             local util = require(ReplicatedStorage.Modules.Utility)
                             local enum = require(ReplicatedStorage.Modules.EnumLibrary)
 
-                            local aimCF = CFrame.lookAt(targetRoot.Position, targetPart.Position)
-                            local targetCF = targetPart.CFrame
+                            local aimCF = CFrame.lookAt(targetRoot.Position, targetHead.Position)
+                            local targetCF = targetHead.CFrame
                             local randomOffset = Vector3.new(
                                 (math.random() - 0.5) * 0.1,
                                 (math.random() - 0.5) * 0.1,
                                 (math.random() - 0.5) * 0.1
                             )
-                            local aimedPos = targetPart.Position + randomOffset
-                            local objSpaceHeadOffset = targetPart.CFrame:ToObjectSpace(CFrame.new(aimedPos))
+                            local aimedPos = targetHead.Position + randomOffset
+                            local objSpaceHeadOffset = targetHead.CFrame:ToObjectSpace(CFrame.new(aimedPos))
 
                             local cameradata = {
                                 [utf8.char(1)] = {
                                     [utf8.char(0)] = util:EncodeCFrame(aimCF),
                                     [utf8.char(1)] = util:EncodeCFrame(targetCF),
-                                    [utf8.char(2)] = targetPart,
+                                    [utf8.char(2)] = targetHead,
                                     [utf8.char(3)] = util:EncodeCFrame(objSpaceHeadOffset)
                                 }
                             }
@@ -2529,11 +2498,11 @@ RunService.RenderStepped:Connect(function(dt)
     end
 
     if OrbitActive then
-        local targetPlayer, targetRoot, targetPart = getClosestTriggerTarget()
-        if targetPlayer and targetRoot and targetPart and targetPlayer.Character and targetPlayer.Character:FindFirstChild("HumanoidRootPart") then
+        local targetPlayer, targetRoot, targetHead = getClosestTriggerTarget()
+        if targetPlayer and targetRoot and targetHead and targetPlayer.Character and targetPlayer.Character:FindFirstChild("HumanoidRootPart") then
             local tChar = targetPlayer.Character
             local hrp = tChar.HumanoidRootPart
-            local targetObj = targetPart or hrp
+            local head = tChar:FindFirstChild("Head") or hrp
             local myRoot = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
             if myRoot then
                 local angle = (tickCount * (OrbitSpeed * 0.08)) * OrbitAngle
@@ -2551,7 +2520,7 @@ RunService.RenderStepped:Connect(function(dt)
             else
                 desyncPos = (targetRoot.CFrame * CFrame.new(0, 1, 2)).Position
             end
-            desyncCF = CFrame.lookAt(desyncPos, targetObj.Position)
+            desyncCF = CFrame.lookAt(desyncPos, targetHead.Position)
 
             if desyncCF and LocalPlayer.Character then
                 local myRootPart = LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
@@ -2581,20 +2550,20 @@ RunService.RenderStepped:Connect(function(dt)
                     local item = FighterController.LocalFighter.EquippedItem
                     if item and tick() - lastOrbitFire >= 0 then
                         lastOrbitFire = tick()
-                        local aimCF = CFrame.lookAt(myRoot.Position, targetObj.Position)
-                        local targetCF = targetObj.CFrame
+                        local aimCF = CFrame.lookAt(myRoot.Position, head.Position)
+                        local targetCF = head.CFrame
                         local randomOffset = Vector3.new(
                             (math.random() - 0.5) * 0.1,
                             (math.random() - 0.5) * 0.1,
                             (math.random() - 0.5) * 0.1
                         )
-                        local aimedPos = targetObj.Position + randomOffset
-                        local objSpaceHeadOffset = targetObj.CFrame:ToObjectSpace(CFrame.new(aimedPos))
+                        local aimedPos = head.Position + randomOffset
+                        local objSpaceHeadOffset = head.CFrame:ToObjectSpace(CFrame.new(aimedPos))
                         local cameradata = {}
                         cameradata[utf8.char(1)] = {
                             [utf8.char(0)] = util:EncodeCFrame(aimCF),
                             [utf8.char(1)] = util:EncodeCFrame(targetCF),
-                            [utf8.char(2)] = targetObj,
+                            [utf8.char(2)] = head,
                             [utf8.char(3)] = util:EncodeCFrame(objSpaceHeadOffset)
                         }
                         ReplicatedStorage.Remotes.Replication.Fighter.UseItem:FireServer(
@@ -2624,7 +2593,7 @@ RunService.RenderStepped:Connect(function(dt)
         if myRoot and target and isTargetValid(target) and target.Character and target.Character:FindFirstChild("HumanoidRootPart") then
             local tChar = target.Character
             local tHrp = tChar.HumanoidRootPart
-            local optimalHitbox = getTargetPart(tChar) or tHrp
+            local optimalHitbox = tChar:FindFirstChild("Head") or tHrp
 
             local finalCF
 
