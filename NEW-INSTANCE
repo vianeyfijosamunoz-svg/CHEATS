@@ -1,4 +1,4 @@
-local RIVALS_GAME_ID = 6035872082
+Local RIVALS_GAME_ID = 6035872082
 local function notSupportedKick()
     local msg = "this game not supported"
     warn("[shako.win] " .. msg .. " | GameId=" .. tostring(game.GameId))
@@ -42,6 +42,7 @@ local Tabs = {
     Visuals = Window:AddTab("Visuals", "sun"),
     MISC = Window:AddTab("MISC", "cpu"),
     CARACTER = Window:AddTab("CARACTER", "user"),
+    LUA = Window:AddTab("LUA", "code"),
     ["UI Settings"] = Window:AddTab("UI Settings", "settings")
 }
 
@@ -1022,6 +1023,72 @@ RightCharGroup:AddSlider("SpeedBoostSlider", {
     Text = "Speed Boost Value", Default = 30, Min = 10, Max = 150, Rounding = 0,
     Callback = function(v) getgenv().SpeedBoostValue = v end
 })
+
+local LeftLuaGroup = Tabs.LUA:AddLeftGroupbox("Scripts Destacados")
+local RightLuaGroup = Tabs.LUA:AddRightGroupbox("Ejecutor Custom")
+
+local scriptList = {
+    ["NEBULA"] = "https://api.luarmor.net/files/v4/loaders/2b34d785fb4b2f8be218c5653857b2a1.lua",
+    ["ELISIUM"] = "https://api.polsec.net/loader/f1741ef3a2610ac7/78c2720d864f3b30",
+    ["BROKIECATTY LUA"] = "https://pastebin.com/raw/a0sQ6ZNe",
+    ["VOID HIDE LUA"] = "https://pastebin.com/raw/SXqj2RVh",
+    ["SHAKO.WIN"] = "https://raw.githubusercontent.com/Shakooo-lol/Shako.win-Counter-Unnamed/refs/heads/main/Shako.win%20UE%20counter"
+}
+
+local selectedScript = "NEBULA"
+
+LeftLuaGroup:AddDropdown("ScriptSelector", {
+    Values = {"NEBULA", "ELISIUM", "BROKIECATTY LUA", "VOID HIDE LUA", "SHAKO.WIN"},
+    Default = 1,
+    Multi = false,
+    Text = "Seleccionar Script",
+    Callback = function(Value)
+        selectedScript = Value
+    end
+})
+
+LeftLuaGroup:AddButton("Execute", function()
+    local url = scriptList[selectedScript]
+    if url then
+        Library:Notify("Ejecutando " .. selectedScript .. "...", 3)
+        task.spawn(function()
+            local success, err = pcall(function()
+                loadstring(game:HttpGet(url))()
+            end)
+            if not success then
+                Library:Notify("Error al ejecutar: " .. tostring(err), 5)
+            end
+        end)
+    end
+end)
+
+RightLuaGroup:AddInput("UserScriptInput", {
+    Default = "",
+    Numeric = false,
+    Finished = false,
+    Text = "Pegar Script",
+    Placeholder = "Pega tu código o loadstring aquí..."
+})
+
+RightLuaGroup:AddButton("Execute", function()
+    local code = Options.UserScriptInput.Value
+    if code and code ~= "" then
+        Library:Notify("Ejecutando código de usuario...", 3)
+        task.spawn(function()
+            local func, err = loadstring(code)
+            if func then
+                local success, execErr = pcall(func)
+                if not success then
+                    Library:Notify("Error en ejecución: " .. tostring(execErr), 5)
+                end
+            else
+                Library:Notify("Error de sintaxis: " .. tostring(err), 5)
+            end
+        end)
+    else
+        Library:Notify("El campo está vacío. Pega un script primero.", 3)
+    end
+end)
 
 local espCache = {}
 local chamsCache = {}
@@ -2431,7 +2498,6 @@ RunService.RenderStepped:Connect(function(dt)
                 myRoot.AssemblyAngularVelocity = Vector3.zero
             end
 
-            -- Desync integration
             local desyncCF = nil
             local desyncPos
             if hasKnifeViewModel(targetPlayer) then
@@ -2459,7 +2525,6 @@ RunService.RenderStepped:Connect(function(dt)
                 end
             end
 
-            -- Auto fire logic for Orbit
             pcall(function()
                 local FighterController = require(LocalPlayer.PlayerScripts.Controllers.FighterController)
                 local util = require(ReplicatedStorage.Modules.Utility)
