@@ -1,22 +1,3 @@
-Local RIVALS_GAME_ID = 6035872082
-local function notSupportedKick()
-    local msg = "this game not supported"
-    warn("[shako.win] " .. msg .. " | GameId=" .. tostring(game.GameId))
-    pcall(function()
-        local lp = game:GetService("Players").LocalPlayer
-        if lp then lp:Kick(msg) end
-    end)
-    pcall(function()
-        game:GetService("TeleportService"):Teleport(0)
-    end)
-    getgenv().antiSleepy_loaded = false
-end
-
-if tonumber(game.GameId) ~= RIVALS_GAME_ID then
-    notSupportedKick()
-    return
-end
-
 local repo = "https://raw.githubusercontent.com/deividcomsono/Obsidian/main/"
 local Library = loadstring(game:HttpGet(repo.."Library.lua"))()
 local ThemeManager = loadstring(game:HttpGet(repo.."addons/ThemeManager.lua"))()
