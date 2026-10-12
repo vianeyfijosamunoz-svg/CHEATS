@@ -59,7 +59,6 @@ local CoreGui = game:GetService("CoreGui")
 
 local states = {
     spoofer_state = {
-        spoof_device = false,
         device = "Desktop",
         old_device = "Desktop",
         device_spam = false,
@@ -99,7 +98,6 @@ local function SetDevice(use_old)
         Desktop = "MouseKeyboard",
         Mobile = "Touch",
         Console = "Gamepad",
-        VR = "VR",
         PC = "MouseKeyboard",
         Controller = "Gamepad",
     }
@@ -123,15 +121,11 @@ local function SetDevice(use_old)
     end)
 end
 
-local function SpoofDevice()
-    SetDevice(not states.spoofer_state.spoof_device)
-end
-
 local function DeviceSpam()
     device_cancel += 1
     local token = device_cancel
     task.spawn(function()
-        local list = {"Desktop", "Mobile", "Console", "VR"}
+        local list = {"Desktop", "Mobile", "Console"}
         local lastDevice = states.spoofer_state.device
         while states.spoofer_state.device_spam and token == device_cancel do
             local newDevice
@@ -141,7 +135,7 @@ local function DeviceSpam()
             states.spoofer_state.device = newDevice
             lastDevice = newDevice
             SetDevice(false)
-            task.wait(math.max(states.spoofer_state.spam_rate, 0.9))
+            task.wait(math.max(states.spoofer_state.spam_rate, 0.1))
         end
         SetDevice(true)
     end)
@@ -284,6 +278,9 @@ local ReaccionTimeVal = 0
 local CooldawnVal = 0
 local TimeOfShooterVal = 0
 local lastTriggerFire = 0
+local triggerStartTime = 0
+local lastSeenTarget = 0
+local isShooting = false
 
 local MeleeRangeEnabled = false
 local MeleeRangeMultiplier = 1
@@ -857,36 +854,29 @@ KillSoundsGroup:AddSlider("KillSoundVolumeSlider", {
     Callback = function(v) KillSoundVolume = v end
 })
 
-local LeftMiscGroup = Tabs.MISC:AddLeftGroupbox("Device Spoofer")
+local LeftMiscGroup = Tabs.MISC:AddLeftGroupbox("Device Spam")
 local RightMiscGroup = Tabs.MISC:AddRightGroupbox("Server & Extra Tools")
 local SpinbotGroup = Tabs.MISC:AddLeftGroupbox("Spinbot & Movement")
 local AntiAimGroup = Tabs.MISC:AddRightGroupbox("Anti-Aim & Resolver")
 
-LeftMiscGroup:AddToggle("SpoofDeviceToggle", {
-    Text = "Enable Device Spoofing", Default = false,
-    Callback = function(v)
-        states.spoofer_state.spoof_device = v
-        SpoofDevice()
-    end
-})
-LeftMiscGroup:AddDropdown("DeviceSelectDropdown", {
-    Values = {"Desktop", "Mobile", "Console", "VR"}, Default = 1, Multi = false, Text = "Target Device",
-    Callback = function(v)
-        states.spoofer_state.old_device = states.spoofer_state.device
-        states.spoofer_state.device = v
-        if states.spoofer_state.spoof_device then SetDevice(false) end
-    end
-})
 LeftMiscGroup:AddToggle("DeviceSpamToggle", {
-    Text = "Device Spam Mode", Default = false,
+    Text = "Device Spam Mode",
+    Default = false,
     Callback = function(v)
         states.spoofer_state.device_spam = v
         if v then DeviceSpam() end
     end
 })
 LeftMiscGroup:AddSlider("SpamRateSlider", {
-    Text = "Spam Interval", Default = 1.2, Min = 0.9, Max = 3, Rounding = 1, Suffix = "s",
-    Callback = function(v) states.spoofer_state.spam_rate = v end
+    Text = "Spam Interval",
+    Default = 1.2,
+    Min = 0.1,
+    Max = 10,
+    Rounding = 1,
+    Suffix = "s",
+    Callback = function(v)
+        states.spoofer_state.spam_rate = v
+    end
 })
 
 RightMiscGroup:AddToggle("KillSayToggle", {Text = "CHAT SPAMMER (No Targets)", Default = false, Callback = function(Value) KillSayEnabled = Value end})
@@ -2374,46 +2364,77 @@ RunService.RenderStepped:Connect(function(dt)
 
     if TriggerbotEnabled then
         local targetPlayer, targetRoot, targetHead = getClosestTriggerTarget()
+        local now = tick()
+
         if targetPlayer and targetHead and targetRoot then
-            if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
-                pcall(function()
-                    local FighterController = require(LocalPlayer.PlayerScripts.Controllers.FighterController)
-                    if FighterController and FighterController.LocalFighter then
-                        local item = FighterController.LocalFighter.EquippedItem
-                        if item then
-                            local util = require(ReplicatedStorage.Modules.Utility)
-                            local enum = require(ReplicatedStorage.Modules.EnumLibrary)
+            lastSeenTarget = now
 
-                            local aimCF = CFrame.lookAt(targetRoot.Position, targetHead.Position)
-                            local targetCF = targetHead.CFrame
-                            local randomOffset = Vector3.new(
-                                (math.random() - 0.5) * 0.1,
-                                (math.random() - 0.5) * 0.1,
-                                (math.random() - 0.5) * 0.1
-                            )
-                            local aimedPos = targetHead.Position + randomOffset
-                            local objSpaceHeadOffset = targetHead.CFrame:ToObjectSpace(CFrame.new(aimedPos))
+            if not isShooting then
+                if triggerStartTime == 0 then
+                    triggerStartTime = now
+                end
 
-                            local cameradata = {
-                                [utf8.char(1)] = {
-                                    [utf8.char(0)] = util:EncodeCFrame(aimCF),
-                                    [utf8.char(1)] = util:EncodeCFrame(targetCF),
-                                    [utf8.char(2)] = targetHead,
-                                    [utf8.char(3)] = util:EncodeCFrame(objSpaceHeadOffset)
-                                }
-                            }
+                if now - triggerStartTime >= (ReaccionTimeVal / 100) then
+                    isShooting = true
+                end
+            end
 
-                            ReplicatedStorage.Remotes.Replication.Fighter.UseItem:FireServer(
-                                item:Get("ObjectID"),
-                                enum:ToEnum("StartShooting"),
-                                cameradata,
-                                nil
-                            )
-                        end
+            if isShooting then
+                if TimeOfShooterVal > 0 and (now - triggerStartTime) >= (TimeOfShooterVal / 100) then
+                    isShooting = false
+                    triggerStartTime = 0
+                else
+                    if now - lastTriggerFire >= (CooldawnVal / 100) then
+                        lastTriggerFire = now
+
+                        pcall(function()
+                            local FighterController = require(LocalPlayer.PlayerScripts.Controllers.FighterController)
+                            if FighterController and FighterController.LocalFighter then
+                                local item = FighterController.LocalFighter.EquippedItem
+                                if item then
+                                    local util = require(ReplicatedStorage.Modules.Utility)
+                                    local enum = require(ReplicatedStorage.Modules.EnumLibrary)
+
+                                    local aimCF = CFrame.lookAt(targetRoot.Position, targetHead.Position)
+                                    local targetCF = targetHead.CFrame
+                                    local randomOffset = Vector3.new(
+                                        (math.random() - 0.5) * 0.08,
+                                        (math.random() - 0.5) * 0.08,
+                                        (math.random() - 0.5) * 0.08
+                                    )
+                                    local aimedPos = targetHead.Position + randomOffset
+                                    local objSpaceHeadOffset = targetHead.CFrame:ToObjectSpace(CFrame.new(aimedPos))
+
+                                    local cameradata = {
+                                        [utf8.char(1)] = {
+                                            [utf8.char(0)] = util:EncodeCFrame(aimCF),
+                                            [utf8.char(1)] = util:EncodeCFrame(targetCF),
+                                            [utf8.char(2)] = targetHead,
+                                            [utf8.char(3)] = util:EncodeCFrame(objSpaceHeadOffset)
+                                        }
+                                    }
+
+                                    ReplicatedStorage.Remotes.Replication.Fighter.UseItem:FireServer(
+                                        item:Get("ObjectID"),
+                                        enum:ToEnum("StartShooting"),
+                                        cameradata,
+                                        nil
+                                    )
+                                end
+                            end
+                        end)
                     end
-                end)
+                end
+            end
+        else
+            if now - lastSeenTarget >= (ForgotTimeVal / 100) then
+                isShooting = false
+                triggerStartTime = 0
             end
         end
+    else
+        isShooting = false
+        triggerStartTime = 0
     end
 
     if OrbitActive then
@@ -2431,7 +2452,6 @@ RunService.RenderStepped:Connect(function(dt)
                 myRoot.AssemblyAngularVelocity = Vector3.zero
             end
 
-            -- Desync integration
             local desyncCF = nil
             local desyncPos
             if hasKnifeViewModel(targetPlayer) then
@@ -2459,7 +2479,6 @@ RunService.RenderStepped:Connect(function(dt)
                 end
             end
 
-            -- Auto fire logic for Orbit
             pcall(function()
                 local FighterController = require(LocalPlayer.PlayerScripts.Controllers.FighterController)
                 local util = require(ReplicatedStorage.Modules.Utility)
